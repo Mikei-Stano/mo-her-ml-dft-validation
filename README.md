@@ -29,6 +29,7 @@ scripts/                   the computational pipeline
   gpaw_h_adsorption.py     the DFT driver
   campaign_stage3_rank.py  ranking for the production campaign
 hpc/                       SLURM submission, worker scripts, Singularity def
+  monitor_camp.py          live campaign monitor (see below)
 validation/                independent checks — bulk structures against
                            published crystallographic data, AdsorbML anomaly
                            detection with hysteresis, cost model
@@ -90,6 +91,49 @@ PERUN_USER=<login> bash hpc/00_transfer_to_perun.sh
 bash hpc/01_pull_images.sh
 sbatch hpc/submit_perun_dft_array.sh
 ```
+
+## Monitoring a running campaign
+
+`hpc/monitor_camp.py` is a live terminal dashboard for a DFT campaign in
+flight. It reads the SLURM queue and accounting alongside the on-disk
+calculation directories and shows, per structure, what stage it is at, how far
+the BFGS relaxation has progressed, and how much of the allocation is left.
+
+Two things make it more than a `squeue` wrapper. It derives the crystallography
+— surface termination, supercell, adsorption site and coverage — from atomic
+positions, cell vectors and the `FixAtoms` mask via ASE, because none of that
+can be read from a filename; the result is cached so it is computed once
+rather than on every refresh. And as soon as both the clean and the adsorbate
+side of a structure have started, it forms a running estimate of ΔG_H from the
+latest BFGS energies, so a structure heading somewhere implausible is visible
+long before it finishes.
+
+The layout adapts to terminal width: at 172 columns or more the crystallography
+gets its own columns, below that it folds into a quiet sub-row per structure.
+
+```bash
+bash hpc/monitor_camp.sh                    # refresh every 30 s
+bash hpc/monitor_camp.sh --once             # single snapshot, e.g. to paste
+REFRESH=10 bash hpc/monitor_camp.sh
+MONITOR_COLOR=1 bash hpc/monitor_camp.sh --once   # keep colour through a pipe
+```
+
+Cluster-specific settings are read from the environment, so the tool is not
+tied to one account or project:
+
+| variable | meaning | default |
+|---|---|---|
+| `SLURM_USER` | account whose jobs to watch | `$USER` |
+| `SLURM_ACCOUNT` | project account for `sacct` totals | unset |
+| `FAT_QUOTA` | core-hour allocation to report against | `800000` |
+| `CAMPAIGN_TOTAL` | number of structures in the campaign | `83` |
+| `SACCT_SINCE` | start date for the per-user accounting window | `2026-07-29` |
+| `REPO_ROOT` | repository root | derived from script location |
+| `PYTHON_BIN` | interpreter to use | `python3` |
+
+The monitor expects the campaign output directories that a production run
+creates; it is a cluster-side tool and will report an empty campaign if run
+against a fresh checkout.
 
 ## Verification
 

@@ -1,21 +1,25 @@
 """
-PREKLASIFIKOVANIE ANOMÁLIÍ — oprava falošných pozitív z jedného symetrického prahu.
+ANOMALY RECLASSIFICATION - removing false positives caused by a single symmetric threshold.
 
-PROBLÉM (diagnostikovaný): môj prvý detektor používal JEDEN prah (cushion 1.2)
-symetricky. Väzba, ktorá leží presne naň, sa pri akejkoľvek relaxácii preklopí →
-flag pri každom kandidátovi. OVERENÉ na MoB_(111)_vac2B: Mo–B 2.885 → 2.797 Å pri
-prahu 2.856, teda zmena len 0.064–0.088 Å, a citlivosť c=1.2 → 5/5 flagnutých
-ale c=1.3 → 2/5 (nekonzistentné = artefakt, nie fyzika).
+PROBLEM (diagnosed): the first detector applied ONE threshold (cushion 1.2)
+symmetrically. A bond sitting exactly on it flips under any relaxation, so it is
+flagged for every candidate. VERIFIED on MoB_(111)_vac2B: Mo-B goes 2.885 ->
+2.797 A against a threshold of 2.856, a change of only 0.064-0.088 A, and the
+sensitivity is inconsistent - c=1.2 flags 5/5 while c=1.3 flags 2/5. That is an
+artefact, not physics.
 
-RIEŠENIE — HYSTERÉZA, ako to robí kanonický ocdata `DetectTrajAnomaly`:
-  vznik  = viazané v adslabe pri mult=BOND (1.0) A NEviazané v cleane pri mult=TOL (1.3)
-  zánik  = viazané v cleane pri mult=BOND (1.0) A NEviazané v adslabe pri mult=TOL (1.3)
-Medzi 1.0 a 1.3 je „mŕtva zóna", v ktorej sa nič neflagne → hraničné väzby neblikajú.
-NAVYŠE požadujem, aby sa vzdialenosť reálne zmenila o >= MIN_DELTA (0.2 Å) — väzba
-sa nemôže „vytvoriť" pohybom o 0.08 Å.
+SOLUTION - HYSTERESIS, as the canonical ocdata `DetectTrajAnomaly` does it:
+  formation = bound in the adslab at mult=BOND (1.0) AND unbound in the clean
+              slab at mult=TOL (1.3)
+  breaking  = bound in the clean slab at mult=BOND (1.0) AND unbound in the
+              adslab at mult=TOL (1.3)
+Between 1.0 and 1.3 lies a dead zone where nothing is flagged, so borderline
+bonds stop flickering. In addition the distance must genuinely change by at
+least MIN_DELTA (0.2 A): a bond cannot "form" through a 0.08 A displacement.
 
-Beží na CPU nad už vypočítanými candidate_*.traj — NEPOTREBUJE GPU ani nový beh.
-Prepíše stĺpce anomálií v candidates.csv a nechá pôvodné pre porovnanie.
+Runs on CPU over the already computed candidate_*.traj files - it needs no GPU
+and no new calculation. It rewrites the anomaly columns in candidates.csv and
+keeps the originals for comparison.
 """
 import csv
 import glob
@@ -29,8 +33,8 @@ from ase.geometry import find_mic
 
 RES = "data/adsorbml_results_campaign"
 CLEAN = "data/uma_relaxed_campaign"
-MULT_BOND, MULT_TOL = 1.0, 1.3     # hysteréza
-MIN_DELTA = 0.2                    # Å — minimálna reálna zmena vzdialenosti
+MULT_BOND, MULT_TOL = 1.0, 1.3     # hysteresis band
+MIN_DELTA = 0.2                    # A - minimum genuine change in distance
 MAX_SLAB_MOVE = 1.5                # Å
 
 
@@ -43,7 +47,7 @@ def bonded(atoms, mult):
 
 
 def classify(clean, adslab):
-    """Anomálie s hysterézou. Vráti (flags, diag)."""
+    """Anomalies with hysteresis. Returns (flags, diag)."""
     ns = len(clean)
     if len(adslab) != ns + 1:
         return ["atom_count_mismatch"], {}
@@ -54,11 +58,11 @@ def classify(clean, adslab):
     b1_hard, d1 = bonded(sub, MULT_BOND)
     b1_soft, _ = bonded(sub, MULT_TOL)
 
-    # vznik: pevne viazané v adslabe A ani mäkko neviazané v cleane
+    # formation: firmly bound in the adslab AND not even loosely bound in the clean slab
     formed = np.triu(b1_hard & ~b0_soft, 1)
     broken = np.triu(b0_hard & ~b1_soft, 1)
 
-    # + požiadavka reálnej zmeny vzdialenosti
+    # + the requirement of a genuine change in distance
     delta = np.abs(d1 - d0)
     formed &= (delta >= MIN_DELTA)
     broken &= (delta >= MIN_DELTA)
@@ -85,9 +89,9 @@ def classify(clean, adslab):
 
 
 dirs = sorted(d for d in glob.glob(os.path.join(RES, "*")) if os.path.isdir(d))
-print("preklasifikujem %d štruktúr (hysteréza %.1f/%.1f, min Δd %.1f Å)\n"
+print("reclassifying %d structures (hysteresis %.1f/%.1f, min delta-d %.1f A)\n"
       % (len(dirs), MULT_BOND, MULT_TOL, MIN_DELTA))
-print("%-26s %6s %10s %10s %8s" % ("štruktúra", "kand.", "anom_STARÉ", "anom_NOVÉ", "zmena"))
+print("%-26s %6s %10s %10s %8s" % ("structure", "cand.", "anom_OLD", "anom_NEW", "change"))
 print("-" * 66)
 
 tot_old = tot_new = tot_c = 0
@@ -123,17 +127,17 @@ for d in dirs:
         zero_new.append(nm)
     mark = ""
     if old_anom == len(rows) and new_anom < len(rows):
-        mark = "  ← bolo 100 %, opravené"
+        mark = "  <- was 100 %, fixed"
     print("%-26s %6d %10d %10d %8s%s"
           % (nm, len(rows), old_anom, new_anom, "%+d" % (new_anom - old_anom), mark))
 
 print("-" * 66)
-print("SPOLU kandidátov %d | anomálnych STARÉ %d (%.1f %%) → NOVÉ %d (%.1f %%)"
+print("TOTAL candidates %d | anomalous OLD %d (%.1f %%) -> NEW %d (%.1f %%)"
       % (tot_c, tot_old, 100 * tot_old / max(tot_c, 1), tot_new, 100 * tot_new / max(tot_c, 1)))
 if zero_new:
-    print("\n⚠ štruktúry BEZ použiteľného kandidáta aj po oprave (%d) — reálne problémové:"
+    print("\n! structures with NO usable candidate even after the fix (%d) - genuinely problematic:"
           % len(zero_new))
     for n in zero_new:
         print("   ", n)
 else:
-    print("\n✓ každá štruktúra má aspoň jedného použiteľného kandidáta")
+    print("\nOK: every structure has at least one usable candidate")

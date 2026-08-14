@@ -1,7 +1,8 @@
-"""Overenie opráv bulk štruktúr — porovná NAMERANÉ hodnoty s TVRDENÝMI.
+"""Verification of the bulk-structure fixes: MEASURED values against CLAIMED ones.
 
-MoB slúži ako kalibračný bod (nemenil sa, musí dať 1.8493 Å / 8.601 g/cm³).
-Ak niektorá oprava nedá tvrdené číslo, vypíše sa FAIL a nesmie ísť do produkcie.
+MoB serves as the calibration point: it was not modified and must reproduce
+1.8493 Å / 8.601 g/cm3. If any fix fails to reproduce its claimed number the
+run reports FAIL and that structure must not go into production.
 """
 import sys
 import types
@@ -10,7 +11,7 @@ import numpy as np
 
 sys.path.insert(0, "scripts")
 
-# generate_structures importuje veci, ktoré v čistom prostredí nemusia byť
+# generate_structures imports things that may be absent in a clean environment
 for missing in ("gpaw", "gpaw.mpi"):
     if missing not in sys.modules:
         try:
@@ -20,22 +21,22 @@ for missing in ("gpaw", "gpaw.mpi"):
 
 import generate_structures as g  # noqa: E402
 
-# (funkcia, tvrdená min-dist [Å], tvrdená hustota [g/cm³], tvrdený počet atómov, tolerancia hustoty %)
+# (function, claimed min-dist [A], claimed density [g/cm3], claimed atom count, density tolerance %)
 CASES = [
-    ("create_mob_bulk",  1.8493, 8.601,  8,  0.5, "KALIBRÁCIA — nemenené"),
-    ("create_mop_bulk",  2.4495, 7.358,  2,  0.5, "opravené: WC-typ P-6m2"),
-    ("create_mos2_bulk", 2.418,  4.997,  6,  1.0, "opravené: 2H P6_3/mmc"),
-    ("create_mose2_bulk", 2.4907, 6.9814, 6,  1.0, "opravené: 2H P6_3/mmc"),
-    ("create_mo2c_bulk", 2.096,  9.185, 12,  1.0, "opravené: Pbcn expandované"),
-    ("create_mo2n_bulk", 2.0808, 9.4880, 6,  1.0, "opravené: Fm-3m defect rock-salt"),
-    ("create_ti3c2_bulk", 1.993, None,   7,  None, "opravené: P-3m1, hustota N/A (monovrstva)"),
+    ("create_mob_bulk",  1.8493, 8.601,  8,  0.5, "CALIBRATION - unchanged"),
+    ("create_mop_bulk",  2.4495, 7.358,  2,  0.5, "fixed: WC type P-6m2"),
+    ("create_mos2_bulk", 2.418,  4.997,  6,  1.0, "fixed: 2H P6_3/mmc"),
+    ("create_mose2_bulk", 2.4907, 6.9814, 6,  1.0, "fixed: 2H P6_3/mmc"),
+    ("create_mo2c_bulk", 2.096,  9.185, 12,  1.0, "fixed: Pbcn expanded"),
+    ("create_mo2n_bulk", 2.0808, 9.4880, 6,  1.0, "fixed: Fm-3m defect rock salt"),
+    ("create_ti3c2_bulk", 1.993, None,   7,  None, "fixed: P-3m1, density N/A (monolayer)"),
 ]
 
 AMU = 1.66053906660e-24  # g
 
 
 def _min_same(atoms, sym):
-    """Min. vzdialenosť medzi atómami toho istého prvku (PBC-aware)."""
+    """Smallest distance between atoms of the same element (PBC-aware)."""
     d = atoms.get_all_distances(mic=True)
     np.fill_diagonal(d, np.inf)
     idx = [i for i, a in enumerate(atoms) if a.symbol == sym]
@@ -53,7 +54,7 @@ def measure(atoms):
 
 
 print("%-22s %5s %-12s %10s %10s %8s  %s"
-      % ("funkcia", "at.", "formula", "min-dist", "hustota", "verdikt", "poznámka"))
+      % ("function", "at.", "formula", "min-dist", "density", "verdict", "note"))
 print("-" * 108)
 fails = []
 for fn, exp_d, exp_rho, exp_n, tol, note in CASES:
@@ -62,15 +63,15 @@ for fn, exp_d, exp_rho, exp_n, tol, note in CASES:
         n, mind, rho, vol, formula = measure(a)
     except Exception as exc:
         print("%-22s  CHYBA: %s" % (fn, exc))
-        fails.append((fn, "výnimka: %s" % exc)); continue
+        fails.append((fn, "exception: %s" % exc)); continue
 
     problems = []
     if n != exp_n:
-        problems.append("atómov %d != %d" % (n, exp_n))
+        problems.append("atoms %d != %d" % (n, exp_n))
     if abs(mind - exp_d) > 0.01:
         problems.append("min-dist %.4f != %.4f" % (mind, exp_d))
     if exp_rho is not None and abs(rho - exp_rho) / exp_rho * 100 > tol:
-        problems.append("hustota %.4f vs tvrdená %.4f (%.2f %%)"
+        problems.append("density %.4f vs claimed %.4f (%.2f %%)"
                         % (rho, exp_rho, abs(rho - exp_rho) / exp_rho * 100))
 
     verdikt = "OK" if not problems else "FAIL"
@@ -81,15 +82,15 @@ for fn, exp_d, exp_rho, exp_n, tol, note in CASES:
 
 print()
 if fails:
-    print("!!! NEPREŠLO %d z %d — do produkcie NESMIE:" % (len(fails), len(CASES)))
+    print("!!! FAILED %d of %d - must not go into production:" % (len(fails), len(CASES)))
     for fn, why in fails:
         print("   %-22s %s" % (fn, why))
     sys.exit(1)
-print("VŠETKÝCH %d bulk štruktúr prešlo overením (vrátane kalibračného MoB)." % len(CASES))
+print("All %d bulk structures passed verification (including the MoB calibration)." % len(CASES))
 
-# ── kontrola brány proti AA stacking faultu v create_slab ─────────────────
-# POZOR: `miller` je STRING ("(111)"), nie tuple — create_slab volá _parse_miller.
-print("\n=== create_slab: brána proti AA stacking faultu ===")
+# -- check the AA stacking-fault guard in create_slab -----------------------
+# NOTE: `miller` is a STRING ("(111)"), not a tuple - create_slab calls _parse_miller.
+print("\n=== create_slab: AA stacking-fault guard ===")
 print("referencia: v opravenom γ-Mo2N bulku je Mo–Mo = 2.9427 Å")
 slab_fail = []
 for facet in ("(100)", "(110)", "(111)"):
@@ -109,9 +110,9 @@ for facet in ("(100)", "(110)", "(111)"):
 
 print()
 if slab_fail:
-    print("!!! brána NEZACHYTILA stacking fault v %d prípadoch:" % len(slab_fail))
+    print("!!! the guard MISSED a stacking fault in %d cases:" % len(slab_fail))
     for f, L, v in slab_fail:
         print("   %s layers=%d → %s" % (f, L, v))
     sys.exit(1)
-print("Brána proti stacking faultu funguje — všetky rezy a počty vrstiev dávajú "
-      "korektnú Mo–Mo vzdialenosť (predtým (111)/layers=4 dávalo 2.4027 Å).")
+print("The stacking-fault guard works: every cut and layer count gives a correct "
+      "Mo-Mo distance (previously (111)/layers=4 gave 2.4027 A).")

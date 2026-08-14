@@ -30,7 +30,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed, TimeoutError
 from ase import Atoms
 from ase.io import read
 from gpaw import GPAW
-from gpaw.mpi import world   # MPI world (size=1, rank=0 v sériovom behu)
+from gpaw.mpi import world   # MPI world (size=1, rank=0 in a serial run)
 from ase.optimize import BFGS
 from ase.constraints import FixAtoms
 from datetime import datetime
@@ -42,14 +42,14 @@ DATA_OUTPUTS = REPO_ROOT / "data" / "outputs"
 GPAW_OUTPUTS = DATA_OUTPUTS / "gpaw_calculations"
 H2_REFERENCE_FILE = DATA_OUTPUTS / "h2_reference_energy.json"
 OUTPUT_CSV = DATA_OUTPUTS / "gpaw_h_adsorption_results_v2.csv"
-# ── Prázdne env premenné = "nezadané" ────────────────────────────────────────
-# hpc/submit_perun_dft_array.sh exportuje každú voliteľnú premennú aj keď nie je
-# zadaná — ako PRÁZDNY string (`GPAW_MODE="${GPAW_MODE:-}"`). os.environ.get(k, d)
-# vracia default len keď kľúč CHÝBA, takže prázdno prepíše default: mode sa stalo
-# '' namiesto 'lcao', GPAW(mode='') vyhodilo výnimku s prázdnym str() a v logu
-# bolo vidno len `✗ Error: ''`. Následok: joby 74524/74571/74619, 97 taskov FAILED.
-# Rieši sa RAZ na vstupe, nie pri každom čítaní — inak sa to zopakuje pri každej
-# novej premennej pridanej do --export.
+# -- Empty env variables mean "not set" --------------------------------------
+# hpc/submit_perun_dft_array.sh exports every optional variable even when it is
+# unset, as an EMPTY string (`GPAW_MODE="${GPAW_MODE:-}"`). os.environ.get(k, d)
+# returns the default only when the key is MISSING, so an empty value overrides
+# it: mode became '' instead of 'lcao', GPAW(mode='') raised with an empty
+# str(), and the log showed only `Error: ''`. The consequence was 97 FAILED
+# tasks across three jobs. This is handled ONCE at import rather than at every
+# read, otherwise it recurs with each new variable added to --export.
 for _empty_key in [_k for _k, _v in list(os.environ.items())
                    if not str(_v).strip()
                    and _k.startswith(('GPAW_', 'RELAX_', 'ADSORBML_', 'HUBBARD_'))]:
@@ -60,15 +60,17 @@ ADSORBML_OUTPUT_CSV = Path(os.environ.get(
     "ADSORBML_OUTPUT_CSV", str(DATA_OUTPUTS / "gpaw_adsorbml_results.csv")))
 
 def _env_num(name, default, cast=float):
-    """Numerická env premenná, ktorá prežije PRÁZDNY string.
+    """A numeric env variable that survives an EMPTY string.
 
-    hpc/submit_perun_dft_array.sh robí `GPAW_X="${GPAW_X:-}"`, čiže premennú vždy
-    NASTAVÍ — prípadne na ''. os.environ.get(k, dflt) vracia dflt len keď kľúč
-    chýba, takže float('') zhodí každý rank a MPI_Abort zabije job (74524: 47/47
-    FAILED za 22 s). Prázdno preto berieme ako "nezadané".
+    hpc/submit_perun_dft_array.sh does `GPAW_X="${GPAW_X:-}"`, so the variable is
+    always SET, possibly to ''. os.environ.get(k, dflt) returns dflt only when
+    the key is absent, so float('') brings down every rank and MPI_Abort kills
+    the job (47/47 FAILED in 22 s). An empty value is therefore treated as
+    "not set".
 
-    Nečíselná hodnota sa NEtoleruje — preklep GPAW_H=0,16 musí byť hlasný,
-    inak by sa potichu počítalo s iným h, než čo je v provenancii.
+    A non-numeric value is NOT tolerated: a typo such as GPAW_H=0,16 must be
+    loud, otherwise the run would quietly use a different h from the one
+    recorded in the provenance.
     """
     raw = os.environ.get(name, '')
     if raw is None or not str(raw).strip():
@@ -76,7 +78,7 @@ def _env_num(name, default, cast=float):
     try:
         return cast(str(raw).strip())
     except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name}={raw!r} nie je platné číslo: {exc}") from exc
+        raise ValueError(f"{name}={raw!r} is not a valid number: {exc}") from exc
 
 
 # Configuration
@@ -93,60 +95,66 @@ GPAW_CONFIG = {
     },
 }
 
-# ── Funkcionál a bázia (env-prepínače pre konzistenciu s UMA) ─────
-# UMA/OC20 referencia = VASP plane-wave RPBE. Pre like-for-like porovnanie:
-#   GPAW_XC=RPBE      → funkcionál (default PBE); RPBE opravuje PBE prevažovanie
-#                       väzby adsorbátu (Hammer-Hansen-Nørskov) = UMA úroveň
-#   GPAW_MODE=pw      → plnovlnná bázia; robustná pre VEĽKÉ bunky (napr.
-#                       512-atómové MoB_(100), kde LCAO/LFC segfaultne) a
-#                       najbližšie k VASP-PW referencii. Default 'lcao'
-#                       (rýchly; pre slaby s vákuom výrazne lacnejší než PW).
-#   GPAW_PW_ECUT=400  → plane-wave cutoff [eV] v PW móde
+# -- Functional and basis (env switches for consistency with UMA) ------------
+# The UMA/OC20 reference is VASP plane-wave RPBE. For a like-for-like comparison:
+#   GPAW_XC=RPBE      -> functional (default PBE); RPBE corrects the PBE
+#                        over-binding of adsorbates (Hammer-Hansen-Norskov),
+#                        matching the UMA level of theory
+#   GPAW_MODE=pw      -> plane-wave basis; robust for LARGE cells (e.g. the
+#                        512-atom MoB_(100) where LCAO/LFC segfaults) and closest
+#                        to the VASP-PW reference. Default is 'lcao', which is
+#                        fast and, for slabs with vacuum, far cheaper than PW.
+#   GPAW_PW_ECUT=400  -> plane-wave cutoff [eV] in PW mode
 GPAW_CONFIG['xc'] = os.environ.get('GPAW_XC', GPAW_CONFIG['xc'])
 GPAW_CONFIG['mode'] = os.environ.get('GPAW_MODE', GPAW_CONFIG['mode']).strip().lower()
 GPAW_PW_ECUT = _env_num('GPAW_PW_ECUT', 400.0)
-#   GPAW_H=0.16       → mriežkový rozostup [Å]. Doteraz sa NEnastavoval, takže
-#                       bežal implicitný GPAW default ~0.20, ktorý si GPAW volí
-#                       sám a zaokrúhľuje gpts na násobky 4 → naprieč kampaňou
-#                       reálne 0.197–0.212 Å (rozptyl 7.2 %), do Methods sa nedá
-#                       napísať číslo. NAMERANÉ (val3, MoP_(111)): ΔG_H konverguje
-#                       ako ~h² k -0.086 eV; h=0.20 je od limity o 0.029 eV,
-#                       h=0.18 o 0.017, h=0.16 o 0.007. Produkcia: 0.16.
+#   GPAW_H=0.16       -> grid spacing [A]. This used to be left unset, so the
+#                        implicit GPAW default of ~0.20 applied; GPAW picks it
+#                        itself and rounds gpts to multiples of 4, giving an
+#                        actual 0.197-0.212 A across the campaign (a 7.2 %
+#                        spread), which cannot be written into a Methods
+#                        section as a single number. MEASURED on MoP_(111):
+#                        dG_H converges as ~h^2 toward -0.086 eV; h=0.20 is
+#                        0.029 eV from the limit, h=0.18 is 0.017 eV and h=0.16
+#                        is 0.007 eV away. Production uses 0.16.
 GPAW_H = _env_num('GPAW_H', 0.20)
-# Symetria: vysoko-symetrické bunky (napr. MoP_(100) 128 at., P4mm) padajú na
-# GPAW bugu `SymmetryAnalysisBug` v group_check() PRED SCF. `symmetry='off'`
-# obíde buggy redukciu — dáva IDENTICKÉ energie (symetria je len urýchlenie),
-# cena zanedbateľná pri malej k-mriežke. GPAW_SYMMETRY=off zapne.
+# Symmetry: highly symmetric cells (e.g. the 128-atom MoP_(100), P4mm) trip the
+# GPAW `SymmetryAnalysisBug` in group_check() BEFORE the SCF cycle starts.
+# `symmetry='off'` bypasses the buggy reduction and gives IDENTICAL energies -
+# symmetry is only an acceleration - at negligible cost for a small k-mesh.
+# Enable with GPAW_SYMMETRY=off.
 GPAW_SYMMETRY = os.environ.get('GPAW_SYMMETRY', '').strip().lower()
-# k-body override (FAT-ladenie). Pre VEĽKÉ superbunky (napr. 128-at. MoB_(100))
-# je hustá 4×4×1 mriežka drahá aj zbytočná — väčšia bunka = menšia Brillouinova
-# zóna, takže redšia k-mriežka stačí. ΔG_H je ROZDIEL energií (E_slab+H − E_slab),
-# kde systematická k-chyba do veľkej miery vypadne. GPAW_KPTS="2,2,1".
+# k-point override (cost tuning). For LARGE supercells (e.g. the 128-atom
+# MoB_(100)) a dense 4x4x1 mesh is both expensive and unnecessary: a larger cell
+# means a smaller Brillouin zone, so a sparser mesh suffices. dG_H is a
+# DIFFERENCE of energies (E_slab+H - E_slab) in which the systematic k-point
+# error largely cancels. Set with GPAW_KPTS="2,2,1".
 _kpts_env = os.environ.get('GPAW_KPTS', '').strip()
 if _kpts_env:
     GPAW_CONFIG['kpts'] = tuple(int(x) for x in _kpts_env.replace('x', ',').split(','))
-# Smearing (Fermi-Diracova šírka). Väčšie σ = hladšie obsadenie pri Fermiho
-# hladine → rýchlejšia a stabilnejšia SCF konvergencia kovových povrchov
-# (default GPAW 0.1 eV je pre ťažko-konvergujúce kovové MoB primalé). GPAW_SIGMA=0.15.
+# Smearing (Fermi-Dirac width). A larger sigma gives smoother occupations at the
+# Fermi level and hence faster, more stable SCF convergence on metallic surfaces
+# (the GPAW default of 0.1 eV is too small for hard-to-converge metallic MoB).
+# Set with GPAW_SIGMA=0.15.
 GPAW_SIGMA = os.environ.get('GPAW_SIGMA', '').strip()
 
-# ── Výkon & presnosť (env-prepínače) ─────────────────────────────
-# VŠETKY defaulty zachovávajú súčasné čisté-PBE správanie a NEznižujú
-# presnosť. Zrýchlenie (MPI, ScaLAPACK) je EXAKTNÉ — rovnaké k-body,
-# cutoff aj báza, len sa práca rozdelí. Voľby, ktoré MENIA fyziku
-# (Stichove odporúčania: DFT+U, spin), sú OFF a treba ich vedome
-# zapnúť pre SAMOSTATNÚ kampaň (inak pokazia porovnanie s UMA/PBE).
+# -- Performance and accuracy (env switches) ---------------------------------
+# EVERY default preserves the current plain-PBE behaviour and does NOT reduce
+# accuracy. The speed-ups (MPI, ScaLAPACK) are EXACT: identical k-points, cutoff
+# and basis, only the work is distributed. Options that CHANGE the physics
+# (DFT+U, spin polarisation) are OFF and must be enabled deliberately for a
+# SEPARATE campaign, since they would otherwise break comparability with UMA.
 def _env_flag(name, default=False):
     v = os.environ.get(name)
     return default if v is None else v.strip().lower() in ("1", "true", "yes", "on")
 
-# (a) ScaLAPACK — paralelná diagonalizácia (exaktné). Účinné len ak je
-#     GPAW postavený so ScaLAPACK; inak GPAW voľbu bezpečne ignoruje.
+# (a) ScaLAPACK - parallel diagonalisation (exact). Effective only if GPAW was
+#     built with ScaLAPACK; otherwise GPAW safely ignores the option.
 USE_SCALAPACK = _env_flag("GPAW_SCALAPACK", False)
 
-# (b) DFT+U (Hubbard) — Stich: čisté PBE je pre 3d/prechodné kovy
-#     nespoľahlivé (lokalizačná chyba d-stavov). MENÍ výsledky -> default
-#     prázdne. Env formát: HUBBARD_U="Mo:3.0,Ni:4.0"
+# (b) DFT+U (Hubbard) - plain PBE is unreliable for 3d/transition metals
+#     because of the d-state localisation error. This CHANGES results, so the
+#     default is empty. Env format: HUBBARD_U="Mo:3.0,Ni:4.0"
 def _parse_hubbard_u(spec):
     out = {}
     for tok in (spec or "").split(","):
@@ -157,27 +165,30 @@ def _parse_hubbard_u(spec):
     return out
 HUBBARD_U = _parse_hubbard_u(os.environ.get("HUBBARD_U", ""))
 
-# (c) Spinová polarizácia — Stich: 3d kovy (Ni, Fe, Co, Mn) sú magnetické.
-#     MENÍ výsledky a ~2x predražuje -> default OFF (GPAW_SPINPOL=1).
+# (c) Spin polarisation - the 3d metals (Ni, Fe, Co, Mn) are magnetic. This
+#     CHANGES results and roughly doubles the cost, so the default is OFF.
+#     Enable with GPAW_SPINPOL=1.
 SPINPOL = _env_flag("GPAW_SPINPOL", False)
 MAGNETIC_INIT = {"Fe": 2.2, "Co": 1.6, "Ni": 0.6, "Mn": 2.5, "Cr": 1.0}
 
 RELAXATION_CONFIG = {
     'fmax': _env_num('RELAX_FMAX', 0.05),                  # Force conv (eV/Å)
-    # Strop krokov: predošlá kampaň mala 30 a ten strop bol BINDING v 27 zo 44
-    # výpočtov (finálny fmax 0.068–2.411 eV/Å, energia ešte klesala až 1.28 eV/3
-    # kroky) → výsledky nepoužiteľné, ~86k core·h premrhaných. Preto 200 + relax
-    # je REŠTARTOVATEĽNÝ (viď _maybe_relax), takže scancel nezničí prácu.
+    # Step cap: the previous campaign used 30 and that cap was BINDING in 27 of
+    # 44 calculations (final fmax 0.068-2.411 eV/A, with the energy still falling
+    # by up to 1.28 eV per three steps), making those results unusable. Hence 200
+    # steps, and the relaxation is RESTARTABLE (see _maybe_relax) so that a
+    # cancelled job does not destroy the work done.
     'steps': _env_num('RELAX_STEPS', 200, int),
 }
 
 USE_RELAXATION = True
 
-# AdsorbML mód: default single-point (rýchly). Pre reaktívne kovové povrchy je
-# single-point na UMA(RPBE) geometrii nespoľahlivý (ML geom ≠ DFT minimum →
-# ΔG mimo o desiatky eV). ADSORBML_RELAX=1 zapne DFT relaxáciu clean aj adslab
-# (spodok zamrznutý) → konzistentné DFT minimá = správna adsorpčná energia.
-# Odporúčané spolu s GPAW_XC=RPBE, RELAX_FMAX=0.05, RELAX_STEPS=30.
+# AdsorbML mode: single-point by default (fast). On reactive metallic surfaces a
+# single-point on the UMA(RPBE) geometry is unreliable, since the ML geometry is
+# not a DFT minimum and dG can be off by tens of eV. ADSORBML_RELAX=1 enables DFT
+# relaxation of both the clean slab and the adslab (bottom frozen), giving
+# consistent DFT minima and hence a correct adsorption energy. Recommended
+# together with GPAW_XC=RPBE, RELAX_FMAX=0.05.
 ADSORBML_RELAX = _env_flag("ADSORBML_RELAX", False)
 
 # Parallelism: cores allocated per GPAW calculation
@@ -197,9 +208,10 @@ CSV_COLUMNS = [
 ]
 
 # CSV header for AdsorbML-mode results (separate file, includes ML comparison column)
-# PROVENANCE (pridané 2026-07-28): bez týchto stĺpcov sa nedalo odlíšiť konvergovaný
-# výpočet od utnutého ani zistiť, akými nastaveniami bol riadok spočítaný — čo umožnilo,
-# aby sa do jedného CSV appendovali behy s rôznym XC/k-mriežkou/σ bez rozlíšenia.
+# PROVENANCE: without these columns a converged calculation could not be told
+# apart from a truncated one, nor could the settings behind a row be recovered -
+# which allowed runs with different XC, k-mesh or sigma to be appended into one
+# CSV indistinguishably.
 ADSORBML_PROVENANCE_COLUMNS = [
     'relax_converged_clean', 'fmax_final_clean', 'relax_steps_clean',
     'relax_converged_adslab', 'fmax_final_adslab', 'relax_steps_adslab',
@@ -210,13 +222,14 @@ ADSORBML_PROVENANCE_COLUMNS = [
 ADSORBML_CSV_COLUMNS = CSV_COLUMNS + ['gibbs_free_ml_eV'] + ADSORBML_PROVENANCE_COLUMNS
 
 
-# Posledný traceback zo spracovania štruktúry — vypisuje sa spolu s err_text.
+# Last traceback from processing a structure - printed alongside err_text.
 _LAST_EXC = {}
 
 
 def _config_fingerprint():
-    """Krátky hash celej výpočtovej konfigurácie — ide do každého CSV riadku aj do
-    názvu výpočtového adresára, takže kampane sa nemôžu navzájom prepísať."""
+    """Short hash of the whole calculation configuration. It goes into every CSV
+    row and into the calculation directory name, so campaigns cannot overwrite
+    one another."""
     import hashlib
     parts = [
         str(GPAW_CONFIG.get('xc')), str(GPAW_CONFIG.get('mode')),
@@ -293,7 +306,7 @@ def _ensure_csv_header(csv_path, columns=None):
 
 def _append_result_csv(result_row, csv_path):
     """Append a single result row to CSV with file locking."""
-    if world.rank != 0:          # pod MPI zapisuje iba rank 0 (inak N duplicít)
+    if world.rank != 0:          # under MPI only rank 0 writes (else N duplicates)
         return
     csv_path = Path(csv_path)
     with open(csv_path, 'a', newline='') as f:
@@ -385,43 +398,45 @@ def setup_gpaw_calculator(label='gpaw'):
         txt=label + '.txt',
         convergence=GPAW_CONFIG['convergence'],
     )
-    # Bázia: LCAO (rýchle, default) alebo plnovlnná PW (robustná pre veľké bunky).
+    # Basis: LCAO (fast, default) or plane-wave PW (robust for large cells).
     if GPAW_CONFIG['mode'] == 'pw':
         from gpaw import PW
-        kwargs['mode'] = PW(GPAW_PW_ECUT)      # PW nepoužíva LCAO 'basis'
+        kwargs['mode'] = PW(GPAW_PW_ECUT)      # PW does not use the LCAO 'basis'
     else:
         kwargs['mode'] = GPAW_CONFIG['mode']   # 'lcao'
         kwargs['basis'] = GPAW_CONFIG['basis']
-        kwargs['h'] = GPAW_H                   # inak GPAW volí ~0.20 sám (7.2 % rozptyl)
-    # Exaktné zrýchlenie (nemení výsledok): paralelná diagonalizácia.
+        kwargs['h'] = GPAW_H                   # else GPAW picks ~0.20 itself (7.2 % spread)
+    # Exact speed-up (does not change the result): parallel diagonalisation.
     if USE_SCALAPACK:
         kwargs['parallel'] = {'sl_auto': True}
-    # Stichove voľby (menia fyziku, default OFF):
+    # Options that change the physics (default OFF):
     if HUBBARD_U:
         kwargs['setups'] = dict(HUBBARD_U)
     if SPINPOL:
         kwargs['spinpol'] = True
     # SYMETRIA — pozor, `symmetry='off'` je v GPAW ekvivalent
     #   Symmetry(point_group=False, time_reversal=False)
-    # čo znamená IBZ = celá BZ (overené v logoch: "Number of BZ points: 16 /
-    # Number of IBZ points: 16", teda ŽIADNA redukcia).
+    # which means IBZ = the full BZ (confirmed in the logs: "Number of BZ
+    # points: 16 / Number of IBZ points: 16", i.e. NO reduction at all).
     #
-    # Workaround na SymmetryAnalysisBug (MoP_(100), P4mm) potreboval vypnúť LEN
-    # point_group: bug je v group_check() (gpaw/new/symmetry.py), ktorý iteruje
-    # výhradne cez `rotation_scc`; pri point_group=False je rotation_scc=[identita],
-    # takže sa nemôže vyhodiť. Vypnutie `time_reversal` bola kolaterálna škoda.
+    # The workaround for SymmetryAnalysisBug (MoP_(100), P4mm) only needed
+    # point_group disabled: the bug lives in group_check() (gpaw/new/symmetry.py),
+    # which iterates solely over `rotation_scc`, and with point_group=False that
+    # is just the identity, so it cannot fire. Disabling `time_reversal` as well
+    # was collateral damage.
     #
-    # time_reversal=True je EXAKTNÉ pre nemagnetický systém bez spin-orbitálnej
-    # väzby: E_n(k) = E_n(-k) (Kramers) → polovica MP mriežky je redundantná.
-    # Overené: dáva n_IBZ = 8 (zo 16) pre VŠETKÝCH 84 štruktúr kampane → 2x menej
-    # diagonalizácií pri chybe 0.000 eV. Naviac umožní MPI_RANKS = 8 namiesto 16,
-    # čím sa alokácia zmenší z 80 na 40 jadier pri nezmenenom wall-time.
+    # time_reversal=True is EXACT for a non-magnetic system without spin-orbit
+    # coupling: E_n(k) = E_n(-k) by Kramers degeneracy, so half the
+    # Monkhorst-Pack mesh is redundant. Verified: it gives n_IBZ = 8 of 16 for
+    # ALL 84 campaign structures, halving the number of diagonalisations at an
+    # error of exactly 0.000 eV. It also allows MPI_RANKS = 8 instead of 16,
+    # cutting the allocation from 80 to 40 cores at unchanged wall time.
     if GPAW_SYMMETRY in ('off', 'nopg'):
         kwargs['symmetry'] = {'point_group': False, 'time_reversal': True}
     elif GPAW_SYMMETRY == 'hard-off':
-        # únikový ventil, ak by point_group=False na nejakej bunke nestačilo
+        # escape hatch in case point_group=False is not enough for some cell
         kwargs['symmetry'] = 'off'
-    # Smearing pre kovové povrchy (FAT-ladenie SCF konvergencie):
+    # Smearing for metallic surfaces (tuning SCF convergence):
     if GPAW_SIGMA:
         from gpaw import FermiDirac
         kwargs['occupations'] = FermiDirac(float(GPAW_SIGMA))
@@ -429,8 +444,8 @@ def setup_gpaw_calculator(label='gpaw'):
 
 
 def _apply_initial_magmoms(atoms):
-    """Nastaví štartovacie magnetické momenty pre magnetické 3d kovy
-    (len ak je zapnutá spinová polarizácia — Stichovo odporúčanie)."""
+    """Set initial magnetic moments for magnetic 3d metals
+    (only when spin polarisation is enabled)."""
     if not SPINPOL:
         return atoms
     moments = [MAGNETIC_INIT.get(sym, 0.0) for sym in atoms.get_chemical_symbols()]
@@ -449,16 +464,18 @@ def _prepare_slab(slab_file):
 
 
 def _maybe_relax(atoms, label):
-    """Local relaxation. REŠTARTOVATEĽNÁ a so ZÁZNAMOM konvergencie.
+    """Local relaxation. RESTARTABLE, and it RECORDS convergence.
 
-    Dve opravy proti predošlej kampani:
-      (1) `restart=` + `trajectory=` → pri scancel/timeout sa Hessián aj geometria
-          zachovajú a ďalší beh pokračuje, nezačína od nuly (predtým sa 27 zo 44
-          výpočtov utnulo na strope a práca sa zahodila).
-      (2) výsledok konvergencie sa uloží do `atoms.info`, aby ho volajúci mohol
-          zapísať do CSV. Bez toho sa nedá odlíšiť konvergovaný výpočet od
-          utnutého — a presne to spôsobilo rozstrel E_clean 4.56 eV.
-    Vracia `atoms` (rovnaká signatúra ako predtým, aby volajúci nemuseli meniť).
+    Two corrections relative to the previous campaign:
+      (1) `restart=` plus `trajectory=` preserve both the Hessian and the
+          geometry across a cancellation or timeout, so the next run continues
+          instead of starting from scratch. Previously 27 of 44 calculations hit
+          the step cap and the work was discarded.
+      (2) the convergence outcome is stored in `atoms.info` so the caller can
+          write it into the CSV. Without it a converged calculation cannot be
+          told apart from a truncated one - exactly what caused a 4.56 eV spread
+          in E_clean.
+    Returns `atoms`, keeping the previous signature so callers need no change.
     """
     atoms.info.setdefault('relax_requested', bool(USE_RELAXATION))
     if not USE_RELAXATION:
@@ -479,8 +496,8 @@ def _maybe_relax(atoms, label):
                   if isinstance(c, FixAtoms))
 
     optimizer = BFGS(atoms, logfile=f"{label}_relax.log",
-                     restart=f"{label}_relax.pckl",      # Hessián prežije restart
-                     trajectory=f"{label}_relax.traj")   # geometria prežije restart
+                     restart=f"{label}_relax.pckl",      # Hessian survives a restart
+                     trajectory=f"{label}_relax.traj")   # geometry survives a restart
     converged = optimizer.run(fmax=RELAXATION_CONFIG['fmax'],
                               steps=RELAXATION_CONFIG['steps'])
 
@@ -502,7 +519,7 @@ def _maybe_relax(atoms, label):
     if not converged:
         print(f"     ⚠️  {os.path.basename(label)}: relax NEKONVERGOVAL "
               f"(kroky {atoms.info['relax_steps']}/{RELAXATION_CONFIG['steps']}, "
-              f"fmax {fmax_final}) — riadok bude označený relax_converged=False")
+              f"fmax {fmax_final}) - the row will be marked relax_converged=False")
     return atoms
 
 
@@ -621,8 +638,8 @@ def calculate_slab_with_h_energy(slab, output_dir, h_distance=1.5):
         return None, None, None
 
 
-# Merania z relaxácie H₂ — plní ich calculate_h2_molecule_energy(),
-# číta get_h2_reference_energy() pri zápise provenancie do JSON.
+# Measurements from the H2 relaxation - written by calculate_h2_molecule_energy()
+# and read by get_h2_reference_energy() when the provenance JSON is written.
 _H2_PROVENANCE = {}
 
 
@@ -652,8 +669,9 @@ def calculate_h2_molecule_energy(output_dir):
         calc = GPAW(
             mode=GPAW_CONFIG['mode'],
             basis=GPAW_CONFIG['basis'],
-            h=GPAW_H,        # KRITICKÉ: ΔG_H = E_adslab - E_clean - ½E(H₂), a H₂ je
-                             # v INEJ bunke. Bez rovnakého h je ΔG_H nekonzistentné.
+            h=GPAW_H,        # CRITICAL: dG_H = E_adslab - E_clean - 0.5 E(H2), and
+                             # H2 sits in a DIFFERENT cell. Without the same h,
+                             # dG_H would be inconsistent.
             xc=GPAW_CONFIG['xc'],
             kpts=(1, 1, 1),  # Only 1 k-point for isolated molecule
             txt=f'{output_dir}/h2_molecule.txt',
@@ -661,15 +679,16 @@ def calculate_h2_molecule_energy(output_dir):
         )
         
         h2.calc = calc
-        # H₂ MUSÍ byť zrelaxovaná — d = 0.750 Å je ASE default, nie RPBE/dzp minimum.
-        # Namerané (job 74292): minimum je d = 0.7757 Å, E = -6.433239 eV proti
-        # -6.421482 eV pri 0.750 Å. Tých 11.8 meV je +5.9 meV posun v každom ΔG_H.
+        # H2 MUST be relaxed: d = 0.750 A is the ASE default, not the RPBE/dzp
+        # minimum. Measured: the minimum is d = 0.7757 A at E = -6.433239 eV
+        # against -6.421482 eV at 0.750 A. Those 11.8 meV shift every dG_H by
+        # +5.9 meV.
         h2_opt = BFGS(h2, logfile=f'{output_dir}/h2_relax.log',
                       trajectory=f'{output_dir}/h2_relax.traj')
         h2_converged = bool(h2_opt.run(fmax=0.01, steps=50))
         energy = h2.get_potential_energy()
         d_hh = float(np.linalg.norm(h2.positions[1] - h2.positions[0]))
-        print(f"     ✓ H₂ relaxovaná: d(H–H) = {d_hh:.4f} Å, {h2_opt.nsteps} krokov, "
+        print(f"     H2 relaxed: d(H-H) = {d_hh:.4f} A, {h2_opt.nsteps} steps, "
               f"{'konvergovala' if h2_converged else 'NEKONVERGOVALA (fmax 0.01)'}")
         _H2_PROVENANCE.update(d_HH_A=d_hh, bfgs_steps=int(h2_opt.nsteps),
                               relax_converged=h2_converged)
@@ -685,9 +704,10 @@ def calculate_h2_molecule_energy(output_dir):
 
 
 def _h2_config_fingerprint():
-    """Hash tých parametrov, ktoré MENIA E(H₂). ΔG_H = E_adslab − E_clean − ½E(H₂),
-    pričom H₂ sa počíta v INEJ bunke než slaby — takže mriežka `h`, bázia, mód
-    a funkcionál musia byť tie isté, inak je ΔG_H nekonzistentné."""
+    """Hash of the parameters that CHANGE E(H2). dG_H = E_adslab - E_clean -
+    0.5 E(H2), and H2 is computed in a DIFFERENT cell from the slabs, so the
+    grid spacing `h`, the basis, the mode and the functional must all match;
+    otherwise dG_H is inconsistent."""
     import hashlib
     parts = [str(GPAW_CONFIG.get('mode')), str(GPAW_CONFIG.get('basis')),
              str(GPAW_CONFIG.get('xc')), f"{GPAW_H:.4f}"]
@@ -697,10 +717,10 @@ def _h2_config_fingerprint():
 def get_h2_reference_energy():
     """Get H2 reference energy from cache or compute once for this campaign.
 
-    Cache sa NIKDY nemaže: v array jobe by 47 taskov mazalo a prepočítavalo ten
-    istý súbor naraz (race + 47× tá istá práca). Pri nesúlade fingerprintu sa
-    beh zastaví s instrukciou, aby sa referencia naseedovala raz — mlčky použiť
-    inú referenciu je horšie než spadnúť.
+    The cache is NEVER deleted: in an array job 47 tasks would delete and
+    recompute the same file at once - a race, and the same work done 47 times.
+    On a fingerprint mismatch the run stops with instructions to seed the
+    reference once. Silently using a different reference is worse than failing.
     """
     want = _h2_config_fingerprint()
     if H2_REFERENCE_FILE.exists():
@@ -711,14 +731,14 @@ def get_h2_reference_energy():
             got = payload.get('h2_config_sha8')
             if got is not None and got != want:
                 raise RuntimeError(
-                    f"H₂ referencia je pre INÚ konfiguráciu (cache {got}, teraz {want}: "
+                    f"the H2 reference belongs to a DIFFERENT configuration (cache {got}, now {want}: "
                     f"mode={GPAW_CONFIG['mode']} basis={GPAW_CONFIG['basis']} "
-                    f"xc={GPAW_CONFIG['xc']} h={GPAW_H}). ΔG_H by bolo nekonzistentné. "
-                    f"Naseeduj referenciu raz (seedh2.sbatch s rovnakými GPAW_* "
-                    f"premennými) a spusti kampaň znova. Súbor: {H2_REFERENCE_FILE}")
+                    f"xc={GPAW_CONFIG['xc']} h={GPAW_H}). dG_H would be inconsistent. "
+                    f"Seed the reference once with the same GPAW_* variables and "
+                    f"rerun the campaign. File: {H2_REFERENCE_FILE}")
             if got is None:
-                print(f"⚠️  H₂ cache bez fingerprintu (staršia) — použije sa, "
-                      f"ale provenancia je neúplná: {H2_REFERENCE_FILE}")
+                print(f"!  H2 cache has no fingerprint (older format) - it will "
+                      f"be used, but the provenance is incomplete: {H2_REFERENCE_FILE}")
             print(f"✓ Loaded cached H2 reference: {energy:.6f} eV  [cfg {got or 'n/a'}]")
             return energy, "cache"
         except RuntimeError:
@@ -741,8 +761,9 @@ def get_h2_reference_energy():
                     'h2_config_sha8': _h2_config_fingerprint(),
                     'grid_spacing_h_A': GPAW_H,
                     'timestamp': datetime.now().isoformat(),
-                    # POZOR: musí to byť konfigurácia H₂, NIE GPAW_CONFIG slabu.
-                    # Predtým sa tu dumpoval globálny GPAW_CONFIG, takže JSON hlásil
+                    # NOTE: this must be the H2 configuration, NOT the slab
+                    # GPAW_CONFIG. The global GPAW_CONFIG used to be dumped here,
+                    # so the JSON reported
                     # kpts=[2,2,1] / relaxation_steps=8 — ani jedno nebola pravda o H₂.
                     'gpaw_config': {
                         'mode': GPAW_CONFIG['mode'],
@@ -751,7 +772,7 @@ def get_h2_reference_energy():
                         'kpts': [1, 1, 1],
                         'periodic': False,
                         'box': 'atoms.center(vacuum=10) → 20 × 20 × (d+20) Å',
-                        'occupations': 'zero-width (GPAW default, neperiodický systém)',
+                        'occupations': 'zero-width (GPAW default, non-periodic system)',
                         'convergence': GPAW_CONFIG['convergence'],
                     },
                     'relaxation': {'optimizer': 'BFGS', 'fmax_target_eV_A': 0.01,
@@ -947,10 +968,12 @@ def _compute_one_adsorbml(args):
     adslab_file  = row['candidate_file']
     gibbs_ml     = row['gibbs_free_ml_eV']
 
-    # Výpočtový adresár kľúčovaný AJ hashom konfigurácie. Predtým bol kľúčovaný len
-    # menom, takže kampane s rôznym XC/k-mriežkou si navzájom prepisovali logy
+    # The calculation directory is keyed by the configuration hash as well.
+    # Previously it was keyed by name alone, so campaigns with a different XC or
+    # k-mesh overwrote one another's logs
     # (napr. Mo2C_(111)/clean_slab.txt bol z 27.7. ale clean_slab_relax.log z 24.7.)
-    # → DFT čísla sa nedali auditovať. Podadresár to oddelí a staré dáta nechá byť.
+    # leaving the DFT numbers unauditable. A subdirectory separates them and
+    # leaves older data untouched.
     cfg8 = _config_fingerprint()
     output_dir = str(GPAW_OUTPUTS / slab_name / cfg8)
     Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -972,33 +995,35 @@ def _compute_one_adsorbml(args):
         _apply_initial_magmoms(clean_slab)
         clean_slab.calc = setup_gpaw_calculator(label=f'{output_dir}/clean_slab')
         if ADSORBML_RELAX:
-            _maybe_relax(clean_slab, f'{output_dir}/clean_slab')   # DFT relaxácia (RPBE)
+            _maybe_relax(clean_slab, f'{output_dir}/clean_slab')   # DFT relaxation (RPBE)
         e_clean = clean_slab.get_potential_energy()
         print(f"     ✓ Clean slab: E = {e_clean:.6f} eV")
 
         adslab = _prepare_slab(adslab_file)
-        # BRÁNA SYMETRIE: adslab musí byť clean + presne jeden H a v tej istej bunke.
-        # Bez tejto kontroly sa dá ticho odčítať energia dvoch nekompatibilných
-        # systémov (predtým malo 24 adresárov relax len na jednej strane).
+        # CONSISTENCY GATE: the adslab must be the clean slab plus exactly one H,
+        # in the same cell. Without this check the energies of two incompatible
+        # systems can be subtracted silently - previously 24 directories had a
+        # relaxation on only one side.
         if len(adslab) != len(clean_slab) + 1:
             raise ValueError(
-                f"nekompatibilný pár: adslab {len(adslab)} at. != clean {len(clean_slab)}+1")
+                f"incompatible pair: adslab {len(adslab)} atoms != clean {len(clean_slab)}+1")
         if adslab.get_chemical_symbols()[-1] != 'H':
-            raise ValueError("posledný atóm adslabu nie je H")
+            raise ValueError("the last atom of the adslab is not H")
         if not np.allclose(adslab.cell[:], clean_slab.cell[:], atol=1e-4):
-            raise ValueError("adslab a clean slab majú rôznu bunku")
+            raise ValueError("adslab and clean slab have different cells")
 
         _apply_initial_magmoms(adslab)
         adslab.calc = setup_gpaw_calculator(label=f'{output_dir}/adslab')
         if ADSORBML_RELAX:
-            _maybe_relax(adslab, f'{output_dir}/adslab')           # DFT relaxácia (RPBE)
+            _maybe_relax(adslab, f'{output_dir}/adslab')           # DFT relaxation (RPBE)
         e_with_h = adslab.get_potential_energy()
         print(f"     ✓ Adslab: E = {e_with_h:.6f} eV")
 
         dgh = e_with_h - e_clean - 0.5 * e_h2
-        # `completed` znamená LEN že výpočet dobehol. O použiteľnosti rozhoduje
-        # relax_converged_* / fmax_final_* v provenance stĺpcoch — konvergenciu
-        # NEZAMIEŇAŤ s dokončením (to bola príčina rozstrelu E_clean 4.56 eV).
+        # `completed` means ONLY that the calculation finished. Usability is
+        # decided by relax_converged_* / fmax_final_* in the provenance columns.
+        # Do NOT conflate convergence with completion - that conflation caused
+        # the 4.56 eV spread in E_clean.
         cc = clean_slab.info.get('relax_converged')
         ca = adslab.info.get('relax_converged')
         status = 'completed' if (cc is not False and ca is not False) else 'completed_unconverged'
@@ -1013,9 +1038,10 @@ def _compute_one_adsorbml(args):
         slab_name, slab_name, 'H',
         e_clean, e_with_h, e_h2,
         dgh, dgh, f'GPAW_{GPAW_CONFIG["xc"]}_adsorbml',
-        # PROVENANCE FIX: tu bol hardcoded literál `False`, takže CSV tvrdilo
-        # relaxed=False AJ KEĎ ADSORBML_RELAX=1 a relaxácia reálne prebehla
-        # (dokázateľné z *_relax.log: BFGS kroky, fmax). Pole klamalo o metóde.
+        # PROVENANCE FIX: a hardcoded `False` literal used to sit here, so the
+        # CSV claimed relaxed=False EVEN WHEN ADSORBML_RELAX=1 and the relaxation
+        # had actually run (provable from *_relax.log: BFGS steps, fmax). The
+        # field was lying about the method used.
         'adsorbml_best', h2_source, bool(ADSORBML_RELAX),
         status, timestamp, gibbs_ml,
     ]
@@ -1037,9 +1063,9 @@ def _compute_one_adsorbml(args):
         output_dir, cfg8,
     ]
     if err_text:
-        print(f"     (chyba zaznamenaná: {err_text})")
+        print(f"     (error recorded: {err_text})")
         # Traceback, nie len text. Bez neho sa numpy chyby typu
-        # "axes don't match array" nedajú lokalizovať a debug sa robí naslepo.
+        # "axes don't match array" cannot be located, leaving debugging blind.
         if _LAST_EXC.get('tb'):
             print(_LAST_EXC['tb'], flush=True)
     _append_result_csv(row_data, ADSORBML_OUTPUT_CSV)
@@ -1080,7 +1106,7 @@ def run_adsorbml_calculations(candidates_csv, workers_override=None, selected_na
         return []
 
     max_workers = _detect_max_workers(override_workers=workers_override)
-    if world.size > 1:           # pod MPI: 1 štruktúra/proces, MPI robí paralelizmus
+    if world.size > 1:           # under MPI: one structure per process, MPI parallelises
         max_workers = 1
     all_results = []
 
@@ -1446,11 +1472,12 @@ def main():
         args.workers = 1
         print("Single-structure mode: forcing workers=1 for scheduler-friendly execution")
 
-    # H₂ cache sa už NEinvaliduje mazaním — porovnanie fingerprintu je vnútri
-    # get_h2_reference_energy(). Starý blok mazal súbor pri nesúlade dvoch kľúčov,
-    # čo v array jobe znamenalo 47 taskov mažúcich ten istý súbor naraz (race),
-    # a keďže jeden z tých kľúčov ('relaxation_steps') sa medzitým zo schémy
-    # stratil, invalidácia sa spúšťala VŽDY (job 74571: 47/47 FAILED).
+    # The H2 cache is no longer invalidated by deletion - the fingerprint
+    # comparison lives inside get_h2_reference_energy(). The old block deleted
+    # the file whenever two keys disagreed, which in an array job meant 47 tasks
+    # deleting the same file at once (a race). Since one of those keys
+    # ('relaxation_steps') had meanwhile dropped out of the schema, invalidation
+    # fired EVERY time, failing all 47 tasks.
     
     # ── AdsorbML validation mode ─────────────────────────────────
     if args.adsorbml_candidates:

@@ -31,12 +31,13 @@ QOS="${QOS:-}"                 # napr. QOS=fat ak FAT alokacia vyzaduje vlastnu 
 TIME_LIMIT="${TIME_LIMIT:-1-00:00:00}"
 CORES_PER_CALC="${CORES_PER_CALC:-11}"
 MEM_PER_CPU="${MEM_PER_CPU:-3500M}"
-# GPAW je memory-bandwidth-bound; plný uzol (320 jadier) saturuje zdieľanú DDR5
-# zbernicu (12 kanálov/socket) → každý job spomalí ~20x. Pamäť na klastri NIE je
-# consumable (SelectType=CR_CORE) → --mem packing NEobmedzí. Počet jobov/uzol
-# preto riadime REZERVÁCIOU JADIER (cpus-per-task): job si vyžiada
-# NODE_CORES/JOBS_PER_NODE jadier, ale spustí len CORES_PER_CALC MPI rankov →
-# zvyšné jadrá ostanú voľné = viac pamäťovej priepustnosti na job.
+# GPAW is memory-bandwidth-bound. A fully occupied node (320 cores) saturates
+# the shared DDR5 bus (12 channels per socket) and every job slows down by
+# roughly 20x. Memory is not a consumable resource on this cluster
+# (SelectType=CR_CORE), so --mem does not limit packing. The number of jobs
+# per node is therefore controlled by RESERVING CORES (cpus-per-task): a job
+# requests NODE_CORES/JOBS_PER_NODE cores but starts only CORES_PER_CALC MPI
+# ranks, leaving the rest idle so each job gets more memory bandwidth.
 # Napr. JOBS_PER_NODE=4, CORES_PER_CALC=16 → 80 jadier/job → 4 joby/uzol.
 JOBS_PER_NODE="${JOBS_PER_NODE:-}"
 NODE_CORES="${NODE_CORES:-320}"
@@ -72,18 +73,19 @@ fi
 LOG_DIR="${REPO_ROOT}/data/outputs/slurm_logs"
 mkdir -p "${LOG_DIR}"
 
-# Rozsah array úloh. Default = všetky štruktúry (1..N s limitom súbežnosti).
-# Kalibrácia jednej štruktúry:  ARRAY_SPEC='1-1' bash hpc/submit_perun_dft_array.sh
+# Array task range. Default = every structure (1..N with a concurrency cap).
+# To calibrate on a single structure:
+#   ARRAY_SPEC='1-1' bash hpc/submit_perun_dft_array.sh
 ARRAY_SPEC="${ARRAY_SPEC:-1-${TASK_COUNT}${ARRAY_LIMIT}}"
 
-# SLURM rozdelenie zdrojov podľa režimu:
-#   USE_MPI=1 -> N MPI rankov (--ntasks=N, 1 vlákno/rank), MPI rieši k-body
-#   USE_MPI=0 -> 1 úloha + N vlákien BLAS (--cpus-per-task=N)
+# SLURM resource layout per mode:
+#   USE_MPI=1 -> N MPI ranks (--ntasks=N, one thread each); MPI splits k-points
+#   USE_MPI=0 -> one task with N BLAS threads (--cpus-per-task=N)
 USE_MPI="${USE_MPI:-0}"
 if [[ "${USE_MPI}" == "1" ]]; then
   NTASKS="${CORES_PER_CALC}"; CPUS_PER_TASK=1
   export MPI_RANKS="${CORES_PER_CALC}"
-  # rezervuj (aj nevyužité) jadrá → obmedz joby/uzol → uvoľni pamäťovú zbernicu
+  # reserve cores (even unused ones) to cap jobs per node and free the memory bus
   if [[ -n "${JOBS_PER_NODE}" ]]; then
     CPUS_PER_TASK=$(( NODE_CORES / (JOBS_PER_NODE * CORES_PER_CALC) ))
     [[ "${CPUS_PER_TASK}" -lt 1 ]] && CPUS_PER_TASK=1
@@ -92,7 +94,7 @@ else
   NTASKS=1; CPUS_PER_TASK="${CORES_PER_CALC}"
 fi
 
-echo "Submitting array ${ARRAY_SPEC} (z ${TASK_COUNT} štruktúr)  part=${PARTITION} qos=${QOS:-<default>} MPI=${USE_MPI} ntasks=${NTASKS} cpt=${CPUS_PER_TASK} mem=[${MEM_FLAG}]${JOBS_PER_NODE:+ (~${JOBS_PER_NODE} jobov/uzol)}"
+echo "Submitting array ${ARRAY_SPEC} (of ${TASK_COUNT} structures)  part=${PARTITION} qos=${QOS:-<default>} MPI=${USE_MPI} ntasks=${NTASKS} cpt=${CPUS_PER_TASK} mem=[${MEM_FLAG}]${JOBS_PER_NODE:+ (~${JOBS_PER_NODE} jobs/node)}"
 
 sbatch \
   --account="${ACCOUNT}" \

@@ -1,30 +1,32 @@
 """
-Generátor VYVÁŽENEJ DFT kampane — 7 rodín × 3 fazety × 4 varianty = 84 štruktúr.
+Generator for a BALANCED DFT campaign: 7 families x 3 facets x 4 variants = 84 structures.
 
-PREČO SAMOSTATNÝ SKRIPT (a nie zmena generate_structures.py):
-Pôvodný generátor produkoval extrémne nerovnaké pokrytie (Mo2C 40 štruktúr vs
-MoP 3), takže dopantová/vakančná os existovala len pre Mo2C/Mo2N/MoB. To je
-zároveň vedecká slabina (nedá sa tvrdiť „rodiny × fazety × modifikácie") aj
-cenový problém (Mo2C sám by zožral 79 % FAT rozpočtu). Tento skript definuje
-kampaň explicitne, s pevným faktoriálnym dizajnom a s per-fazetu optimalizovanými
-veľkosťami buniek. Pôvodný generátor zostáva nedotknutý.
+WHY A SEPARATE SCRIPT (rather than changing generate_structures.py):
+the original generator produced extremely uneven coverage - 40 structures for
+Mo2C against 3 for MoP - so the dopant and vacancy axes existed only for
+Mo2C/Mo2N/MoB. That is both a scientific weakness (one cannot claim a
+"families x facets x modifications" design) and a cost problem, since Mo2C
+alone would consume 79 % of the allocation. This script defines the campaign
+explicitly, with a fixed factorial design and per-facet optimised cell sizes.
+The original generator is left untouched.
 
-DIZAJN (3 × 4 faktoriál, uniformný pre všetkých 7 rodín):
+DESIGN (a 3 x 4 factorial, uniform across all seven families):
     fazety  : (100), (110), (111)
-    varianty: base            — pristinný povrch
-              vac<A>          — jedna aniónová vakancia (pre HER najrelevantnejšie
-                                aktívne miesto, napr. S-vakancia v MoS2)
-              vac2<A>         — dvojitá aniónová vakancia
-              dopPt           — substitúcia jedného povrchového kovu Pt
-                                (Pt = referenčný HER kov)
+    variants: base            - pristine surface
+              vac<A>          - single anion vacancy (the most HER-relevant
+                                active site, e.g. an S vacancy in MoS2)
+              vac2<A>         - double anion vacancy
+              dopPt           - substitution of one surface metal atom by Pt
+                                (Pt as the reference HER metal)
 
-VEĽKOSTI BUNIEK: per (rodina, fazeta) z data/optimal_cell_sizes.json — najmenší
-počet atómov pri layers>=4 (spodná polovica zamrznutá → >=2 voľné vrstvy) a oboch
-in-plane hranách >= 7.0 Å. Prah 7 Å: publikované HER štúdie bežne používajú
-3×3 fcc(111) ≈ 7.5 Å; pre malý adsorbát ako H je to obhájiteľné a znižuje cenu
-Mo2C 8× (192 → 48/96 atómov na fazetách (111)/(110)).
+CELL SIZES: taken per (family, facet) from data/optimal_cell_sizes.json - the
+smallest atom count with layers >= 4 (the lower half is frozen, leaving >= 2
+free layers) and both in-plane edges >= 7.0 A. On the 7 A threshold: published
+HER studies commonly use a 3x3 fcc(111) cell of about 7.5 A; for an adsorbate
+as small as H that is defensible, and it cuts the Mo2C cost eightfold
+(192 -> 48/96 atoms on the (111)/(110) facets).
 
-Použitie:
+Usage:
     CEMEA_CAMPAIGN_OUT=data/inputs/VASP_inputs_campaign \
         python scripts/generate_campaign_set.py
 """
@@ -45,7 +47,7 @@ SIZES_JSON = REPO / "data" / "optimal_cell_sizes.json"
 FACETS = ("(100)", "(110)", "(111)")
 DOPANT = os.environ.get("CEMEA_CAMPAIGN_DOPANT", "Pt")
 
-# rodina → (bulk builder, kovová podmriežka, aniónová podmriežka)
+# family -> (bulk builder, metal sublattice, anion sublattice)
 FAMILIES = {
     "Mo2C":    (G.create_mo2c_bulk,  "Mo", "C"),
     "Mo2N":    (G.create_mo2n_bulk,  "Mo", "N"),
@@ -56,14 +58,14 @@ FAMILIES = {
     "Ti3C2O2": (G.create_ti3c2_bulk, "Ti", "O"),
 }
 
-# ── optimalizované veľkosti ────────────────────────────────────────────────
+# -- optimised cell sizes ---------------------------------------------------
 SIZES = {}
 if SIZES_JSON.is_file():
     for key, v in json.load(open(SIZES_JSON)).items():
         fam, facet = key.split("|")
         SIZES[(fam, facet)] = tuple(v["size"])
 else:
-    print(f"⚠️  {SIZES_JSON} chýba — použije sa default (2,2,4) pre všetko")
+    print(f"!  {SIZES_JSON} missing - falling back to the default (2,2,4) everywhere")
 
 
 def slab_size(fam, facet):
@@ -71,7 +73,7 @@ def slab_size(fam, facet):
 
 
 def build(fam, facet, variant):
-    """Postav jednu štruktúru kampane. Vyhodí výnimku, ak sa nedá (nikdy ticho)."""
+    """Build one campaign structure. Raises if it cannot - never fails silently."""
     bulk_fn, metal, anion = FAMILIES[fam]
     slab = G.create_slab(bulk_fn(), miller=facet, size=slab_size(fam, facet), vacuum=8)
     if variant == "base":
@@ -82,7 +84,7 @@ def build(fam, facet, variant):
         return G.create_multi_vacancy_slab(slab, anion, count=2)
     if variant == f"dop{DOPANT}":
         return G.create_substitution_slab(slab, metal, DOPANT)
-    raise ValueError(f"neznámy variant {variant}")
+    raise ValueError(f"unknown variant {variant}")
 
 
 def variants_for(fam):
@@ -93,7 +95,7 @@ def variants_for(fam):
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     manifest, failed = [], []
-    print(f"kampaň → {OUT}\ndizajn: 7 rodín × 3 fazety × 4 varianty = 84 štruktúr\n")
+    print(f"campaign -> {OUT}\ndesign: 7 families x 3 facets x 4 variants = 84 structures\n")
 
     for fam in FAMILIES:
         print(f"{fam}:")
@@ -126,15 +128,15 @@ def main():
         w.writeheader(); w.writerows(manifest)
 
     print(f"\n{'='*70}")
-    print(f"vygenerovaných: {len(manifest)} / 84   ·   zlyhalo: {len(failed)}")
+    print(f"generated: {len(manifest)} / 84   ·   failed: {len(failed)}")
     if failed:
-        print("ZLYHANIA (hlasné, nie tiché — treba doriešiť):")
+        print("FAILURES (loud, not silent - these need resolving):")
         for n, why in failed:
             print(f"   {n:28s} {why}")
     tot = sum(m["n_atoms"] for m in manifest)
-    print(f"spolu atómov: {tot}, medián {sorted(m['n_atoms'] for m in manifest)[len(manifest)//2]}")
+    print(f"total atoms: {tot}, median {sorted(m['n_atoms'] for m in manifest)[len(manifest)//2]}")
 
-    # odhad ceny (kalibrácia: 96 at. = 2.1 core·h/BFGS krok pri 16 rankoch)
+    # cost estimate (calibration: 96 atoms = 2.1 core-h per BFGS step on 16 ranks)
     cost = sum(2.1 * (m["n_atoms"] / 96.0) ** 3 * 60 * 2 * 5 for m in manifest)
     print(f"odhad DFT (60 krokov/strana, billing ×5): ~{cost:.0f} core·h "
           f"= {100*cost/513450:.1f} % zo zostatku 513 450")

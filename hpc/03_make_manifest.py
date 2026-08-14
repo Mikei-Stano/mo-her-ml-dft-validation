@@ -1,16 +1,19 @@
 """
-FÁZA 1c — vygeneruje AdsorbML manifest pre všetky štruktúry z ranked_structures.csv
-(spusti na PERUNe, stačí login uzol — čistý stdlib Python).
+STAGE 1c — generate the AdsorbML manifest for every structure listed in
+ranked_structures.csv. Runs anywhere, login node included: pure stdlib Python.
 
-- slab_file ukazuje na data/uma_relaxed/<meno>.traj TOHTO repa (aktuálne cesty),
-- Millerove indexy sa parsujú z názvu štruktúry, napr. "MoB_(110)_sheet" -> (1, 1, 0),
-- štruktúry bez slab .traj preskočí s varovaním (očakávaný 1 duplikát *_Node1),
-- zálohuje data/adsorbml_manifest.csv a nahradí ho plnou verziou
-  (číta ho stage 3 extract_rank; stage 2 hotové štruktúry sám preskakuje).
+- slab_file points at data/uma_relaxed/<name>.traj inside THIS repository, so
+  the paths are always current;
+- Miller indices are parsed from the structure name, e.g. "MoB_(110)_sheet"
+  gives (1, 1, 0);
+- structures without a slab .traj are skipped with a warning (one duplicate
+  named *_Node1 is expected);
+- data/adsorbml_manifest.csv is backed up and replaced with the full version.
+  Stage 3 (extract_rank) reads it; stage 2 skips finished structures itself.
 
-Použitie:
+Usage:
     python3 hpc/03_make_manifest.py
-    (voliteľne --ranked-csv /ina/cesta/ranked_structures.csv)
+    (optionally --ranked-csv /other/path/ranked_structures.csv)
 """
 
 import argparse
@@ -57,18 +60,18 @@ def main():
 
     if os.path.isfile(manifest_path):
         shutil.copy(manifest_path, manifest_path + ".bak")
-        print(f"Zálohoval som pôvodný manifest -> {manifest_path}.bak")
+        print(f"Backed up the previous manifest -> {manifest_path}.bak")
 
     with open(manifest_path, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=["slab_name", "slab_file", "millers"])
         w.writeheader()
         w.writerows(rows)
 
-    print(f"Manifest: {len(rows)} štruktúr -> {manifest_path}")
-    print(f"  z toho už hotových (stage 2 ich preskočí): {done}")
-    print(f"  na dopočítanie: {len(rows) - done}")
+    print(f"Manifest: {len(rows)} structures -> {manifest_path}")
+    print(f"  already finished (stage 2 will skip these): {done}")
+    print(f"  still to compute: {len(rows) - done}")
     if skipped:
-        print(f"  PRESKOČENÉ (chýba slab .traj): {skipped}", file=sys.stderr)
+        print(f"  SKIPPED (slab .traj missing): {skipped}", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -13,129 +13,137 @@ import numpy as np
 
 
 def create_mos2_bulk():
-    """2H-MoS2 (molybdenit, C7-typ), P6_3/mmc (#194). OPRAVENÉ 2026-07-28.
+    """2H-MoS2 (molybdenite, C7 type), P6_3/mmc (#194). CORRECTED.
 
-    Pôvodná hand-coded verzia mala DVE nezávislé chyby:
-      (a) len 3 atómy (Z=1) v bunke s c=12.295 Å → vdW medzera 9.34 Å namiesto
-          ~2.98 Å, teda elektronicky odviazaná monovrstva, nie bulk.
-          Hustota 2.4999 vs exp. 4.997 g/cm³ = PRESNE polovica.
-      (b) S na dvoch rôznych podmriežkach (1/3,2/3) a (2/3,1/3) → OKTAEDRICKÁ
-          koordinácia Mo, symetria P-3m1 (#164) = metalický 1T-MoS2, nie
-          polovodivý 2H-MoS2 s trigonálne prizmatickou koordináciou.
+    The original hand-coded version had TWO independent defects:
+      (a) only 3 atoms (Z=1) in a cell with c=12.295 Å, giving a van der Waals
+          gap of 9.34 Å instead of ~2.98 Å — an electronically decoupled
+          monolayer rather than a bulk crystal. Density 2.4999 against an
+          experimental 4.997 g/cm³, i.e. exactly half.
+      (b) S placed on two different sublattices, (1/3,2/3) and (2/3,1/3),
+          producing OCTAHEDRAL Mo coordination with symmetry P-3m1 (#164) —
+          metallic 1T-MoS2 rather than semiconducting 2H-MoS2 with
+          trigonal-prismatic coordination.
 
-    Zdroj: COD 9007660 / AMCSD 0009788 = B. Schönfeld, J. J. Huang, S. C. Moss,
+    Source: COD 9007660 / AMCSD 0009788 = B. Schönfeld, J. J. Huang, S. C. Moss,
     Acta Cryst. B 39, 404 (1983), DOI 10.1107/S0108768183002645.
     Wyckoff: Mo 2c (1/3, 2/3, 1/4); S 4f (1/3, 2/3, z), z = 0.621(4)
-    (z podľa COD 1010993, Dickinson & Pauling, JACS 1923).
+    (z from COD 1010993, Dickinson & Pauling, JACS 1923).
 
-    Overené po oprave: 6 atómov (Mo2S4), min. Mo–S 2.418 Å (exp. 2.41 Å,
-    MP mp-2815: 2.42 Å), vdW medzera 2.975 Å, hustota 4.997 g/cm³
-    (exp. 4.997 g/cm³, 0.0 % chyba), spglib potvrdzuje P6_3/mmc.
+    Verified after the fix: 6 atoms (Mo2S4), minimum Mo–S 2.418 Å (exp. 2.41 Å,
+    MP mp-2815: 2.42 Å), van der Waals gap 2.975 Å, density 4.997 g/cm³
+    (exp. 4.997 g/cm³, 0.0 % error); spglib confirms P6_3/mmc.
     """
     from ase.spacegroup import crystal
     return crystal(
         symbols=["Mo", "S"],
         basis=[(1 / 3, 2 / 3, 0.25),      # Mo, Wyckoff 2c
                (1 / 3, 2 / 3, 0.621)],    # S,  Wyckoff 4f
-        spacegroup=194,                   # P6_3/mmc (2H-MoS2, C7-typ)
+        spacegroup=194,                   # P6_3/mmc (2H-MoS2, C7 type)
         cellpar=[3.161, 3.161, 12.295, 90, 90, 120],
     )
 
 
 def create_mose2_bulk():
-    """2H-MoSe2 (molybdenit-typ), P6_3/mmc (#194). OPRAVENÉ 2026-07-28.
+    """2H-MoSe2 (molybdenite type), P6_3/mmc (#194). CORRECTED.
 
-    Tie isté dve chyby ako MoS2: (1) Se nad Mo na (1/3,2/3) a pod Mo na
-    (2/3,1/3) → trojuholníky pretočené o 60° → OKTAEDRICKÁ (1T) koordinácia
-    namiesto trigonálne prizmatickej (2H); 1T a 2H sú elektronicky odlišné fázy.
-    (2) iba 3 atómy (Z=1) pri c=12.995 Å → izolovaná monovrstva + 9.88 Å vákua,
-    nie bulk. Hustota 3.4631 vs exp. 6.90 g/cm³.
+    The same two defects as MoS2: (1) Se above Mo at (1/3,2/3) and below Mo at
+    (2/3,1/3), so the triangles are rotated by 60°, giving OCTAHEDRAL (1T)
+    coordination instead of trigonal-prismatic (2H) — 1T and 2H are
+    electronically distinct phases. (2) only 3 atoms (Z=1) at c=12.995 Å, an
+    isolated monolayer with 9.88 Å of vacuum rather than a bulk crystal;
+    density 3.4631 against an experimental 6.90 g/cm³.
 
-    Zdroj: COD 2310945 = P. B. James, M. T. Lavik, "The crystal structure of
+    Source: COD 2310945 = P. B. James, M. T. Lavik, "The crystal structure of
     MoSe2", Acta Cryst. 16 (1963) 1183, DOI 10.1107/S0365110X6300311X.
     Wyckoff: Mo 2c (1/3, 2/3, 1/4); Se 4f (1/3, 2/3, 0.625); a=3.288, c=12.900.
 
-    Overené po oprave: 6 atómov (Mo2Se4), min. Mo–Se 2.4907 Å (trigonálna
-    prizma, 6× v zákryte), medzivrstvové Se–Se 3.7422 Å (vdW),
-    hustota 6.9814 g/cm³ vs exp. 6.90 g/cm³ (+1.2 %).
+    Verified after the fix: 6 atoms (Mo2Se4), minimum Mo–Se 2.4907 Å (trigonal
+    prism, six-fold eclipsed), interlayer Se–Se 3.7422 Å (van der Waals),
+    density 6.9814 g/cm³ against an experimental 6.90 g/cm³ (+1.2 %).
     """
     from ase.spacegroup import crystal
     return crystal(
         symbols=["Mo", "Se"],
         basis=[(1 / 3, 2 / 3, 0.25),      # Mo, Wyckoff 2c
                (1 / 3, 2 / 3, 0.625)],    # Se, Wyckoff 4f
-        spacegroup=194,                   # P6_3/mmc (2H-MoS2 typ)
+        spacegroup=194,                   # P6_3/mmc (2H-MoS2 type)
         cellpar=[3.288, 3.288, 12.900, 90, 90, 120],
     )
 
 
 def create_mop_bulk():
-    """MoP, WC-typ (B_h), hexagonálny P-6m2 (#187). OPRAVENÉ 2026-07-28.
+    """MoP, WC type (B_h), hexagonal P-6m2 (#187). CORRECTED.
 
-    Pôvodná hand-coded verzia stavala MoP ako KUBICKÝ CsCl-typ (B2), a=3.240 Å,
-    Mo (0,0,0) / P (½,½,½). Taká fáza NEEXISTUJE. Nešlo o „mierne zlú mriežku":
-    iná Bravaisova mriežka, iná koordinačná geometria (8-násobná kubická vs
-    6-násobná trigonálno-prizmatická), Mo–P 2.806 vs 2.45 Å (+14.6 %),
-    objem +18.7 %, hustota 6.197 vs exp. 7.34 g/cm³ (−15.8 %).
-    Znehodnotilo VŠETKY MoP DFT aj ML výsledky.
+    The original hand-coded version built MoP as a CUBIC CsCl type (B2) with
+    a=3.240 Å, Mo at (0,0,0) and P at (1/2,1/2,1/2). That phase DOES NOT EXIST.
+    This was not a slightly wrong lattice: a different Bravais lattice, a
+    different coordination geometry (eight-fold cubic instead of six-fold
+    trigonal-prismatic), Mo–P 2.806 against 2.45 Å (+14.6 %), volume +18.7 %,
+    density 6.197 against an experimental 7.34 g/cm³ (−15.8 %). It invalidated
+    every MoP result, both DFT and ML.
 
-    Zdroj mriežkových parametrov: Kumar, N. et al., "Extremely high conductivity
-    observed in the triple point topological metal MoP", Nat. Commun. 10, 2475
-    (2019), DOI 10.1038/s41467-019-10126-y — doslovne: "WC-type hexagonal
-    crystal structure ... space group P-6m2 (No. 187) ... a = b = 3.22 Å and
+    Lattice parameters: Kumar, N. et al., "Extremely high conductivity observed
+    in the triple point topological metal MoP", Nat. Commun. 10, 2475 (2019),
+    DOI 10.1038/s41467-019-10126-y — verbatim: "WC-type hexagonal crystal
+    structure ... space group P-6m2 (No. 187) ... a = b = 3.22 Å and
     c = 3.19 Å".
-    Zdroj Wyckoff pozícií: AFLOW prototyp WC (B_h) = AB_hP2_187_a_d-001,
+    Wyckoff positions: AFLOW prototype WC (B_h) = AB_hP2_187_a_d-001,
     Mehl, M. J. et al., Comput. Mater. Sci. 136, S1 (2017),
-    DOI 10.1016/j.commatsci.2017.01.017.  Krížová kontrola: MP mp-219.
+    DOI 10.1016/j.commatsci.2017.01.017. Cross-checked against MP mp-219.
 
-    Overené po oprave: 2 atómy, V = 28.644 Å³, min. Mo–P 2.4495 Å (ref. 2.46 Å),
-    Mo–Mo 3.190 Å (‖c) a 3.220 Å (bazálne), hustota 7.358 g/cm³
-    (exp. 7.34 g/cm³, +0.25 %), ASE potvrdzuje grupu 187.
+    Verified after the fix: 2 atoms, V = 28.644 Å³, minimum Mo–P 2.4495 Å
+    (reference 2.46 Å), Mo–Mo 3.190 Å (parallel to c) and 3.220 Å (basal),
+    density 7.358 g/cm³ (exp. 7.34 g/cm³, +0.25 %); ASE confirms group 187.
     """
     from ase.spacegroup import crystal
     return crystal(
         symbols=["Mo", "P"],
         basis=[(0.0, 0.0, 0.0),                    # Mo, Wyckoff 1a
                (1 / 3, 2 / 3, 0.5)],               # P,  Wyckoff 1d
-        spacegroup=187,                            # P-6m2 (WC / B_h typ)
+        spacegroup=187,                            # P-6m2 (WC / B_h type)
         cellpar=[3.22, 3.22, 3.19, 90, 90, 120],
     )
 
 
 def create_mo2n_bulk():
-    """γ-Mo2N: defect rock-salt (B1), Fm-3m (#225), a = 4.16158 Å. OPRAVENÉ 2026-07-28.
+    """γ-Mo2N: defect rock salt (B1), Fm-3m (#225), a = 4.16158 Å. CORRECTED.
 
-    Pôvodná verzia mala 3 atómy (Mo2N1) v CsCl-podobnej Mo podmriežke → spglib ju
-    klasifikoval ako P4/mmm (#123, TETRAGONÁLNA), nie kubickú; Mo–Mo 3.603 Å
-    namiesto 2.9427 Å (+22.4 %), hustota 4.749 vs exp. 9.496 g/cm³ = PRESNE 2×
-    menej. Docstring „cubic anti-perovskite" bol nepravdivý v oboch tvrdeniach.
-    Slaby mali doslova polovičnú Mo hustotu a umelé intersticiálne dutiny
-    (r = 2.26 vs 2.01 Å), do ktorých H pri DFT relaxácii padal — to je pôvod
-    „subpovrchového H" a 5 najhorších DFT odchýlok (Mo2N_(111) −4.85 eV atď.).
+    The original version had 3 atoms (Mo2N1) on a CsCl-like Mo sublattice, which
+    spglib classified as P4/mmm (#123, TETRAGONAL) rather than cubic: Mo–Mo
+    3.603 Å instead of 2.9427 Å (+22.4 %), density 4.749 against an experimental
+    9.496 g/cm³, i.e. exactly half. The docstring claim of a "cubic
+    anti-perovskite" was untrue in both respects. The slabs had literally half
+    the Mo density and artificial interstitial cavities (r = 2.26 vs 2.01 Å)
+    into which H fell during DFT relaxation — the origin of the apparent
+    "subsurface H" and of the five largest DFT deviations.
 
-    Referencia: COD 1528388 = Bull, C. L. et al., J. Solid State Chem. 179 (2006)
-    1762–1767, DOI 10.1016/j.jssc.2006.03.011 (neutrónová + XRD prášková difrakcia):
-        Mo1  4a (0, 0, 0)        occ 1.000   → plná fcc podmriežka
-        N1   4b (1/2, 1/2, 1/2)  occ 0.506   → N plní POLOVICU oktaédrických dier
+    Reference: COD 1528388 = Bull, C. L. et al., J. Solid State Chem. 179 (2006)
+    1762-1767, DOI 10.1016/j.jssc.2006.03.011 (neutron and XRD powder
+    diffraction):
+        Mo1  4a (0, 0, 0)        occ 1.000   → full fcc sublattice
+        N1   4b (1/2, 1/2, 1/2)  occ 0.506   → N fills HALF the octahedral holes
 
-    Poloobsadenie sa pre DFT reprezentuje usporiadaním: obsadíme 2 zo 4 miest 4b
-    (→ Mo4N2, Z = 2). Overené: všetky 4 neekvivalentné voľby „2 zo 4" dávajú
-    identickú hustotu 9.4880 g/cm³ aj identické prvé sféry (Mo–Mo 2.9427,
-    Mo–N 2.0808, N–N 2.9427 Å) — voľba ovplyvní len povrchovú termináciu.
-    Alternatívy pre skutočne usporiadanú fázu: β-Mo2N I4₁/amd (COD 2311006,
-    Evans & Jack, Acta Cryst. 10 (1957) 833) alebo SQS/väčšia superbunka.
+    For DFT the half occupancy is represented by an ordering: two of the four 4b
+    sites are filled, giving Mo4N2 with Z = 2. Verified: all four inequivalent
+    "two of four" choices give an identical density of 9.4880 g/cm³ and
+    identical first coordination shells (Mo–Mo 2.9427, Mo–N 2.0808,
+    N–N 2.9427 Å) — the choice affects only the surface termination.
+    Alternatives for a genuinely ordered phase: β-Mo2N I4₁/amd (COD 2311006,
+    Evans & Jack, Acta Cryst. 10 (1957) 833) or an SQS / larger supercell.
 
-    Overené po oprave: 6 atómov (Mo4N2), hustota 9.4880 g/cm³
-    (exp. Mo4N2.024 → 9.4958 g/cm³), Mo podmriežka spglib = Fm-3m (#225).
+    Verified after the fix: 6 atoms (Mo4N2), density 9.4880 g/cm³
+    (exp. Mo4N2.024 → 9.4958 g/cm³); spglib gives Fm-3m (#225) for the Mo
+    sublattice.
     """
     from ase import Atoms as _Atoms
     from ase.spacegroup import crystal
 
-    # plná fcc Mo podmriežka: 4a → (0,0,0), (0,½,½), (½,0,½), (½,½,0)
+    # full fcc Mo sublattice: 4a → (0,0,0), (0,½,½), (½,0,½), (½,½,0)
     mo = crystal(symbols=["Mo"], basis=[(0.0, 0.0, 0.0)],
                  spacegroup=225, cellpar=[4.16158] * 3 + [90, 90, 90])
 
-    # 2 zo 4 oktaédrických 4b miest → usporiadanie N/vakancia
+    # two of the four octahedral 4b sites → N/vacancy ordering
     n = _Atoms("N2", cell=mo.get_cell(), pbc=True)
     n.set_scaled_positions([(0.5, 0.5, 0.5), (0.0, 0.0, 0.5)])
 
@@ -143,33 +151,35 @@ def create_mo2n_bulk():
 
 
 def create_mo2c_bulk():
-    """α-Mo2C, ξ-Fe2N-typ, ortorombický Pbcn (#60). OPRAVENÉ 2026-07-28.
+    """α-Mo2C, ξ-Fe2N type, orthorhombic Pbcn (#60). CORRECTED.
 
-    Pôvodná hand-coded verzia mala v bunke iba 6 atómov (4 Mo + 2 C), pričom
-    Pbcn s Mo na 8d a C na 4c vyžaduje 12 atómov (8 Mo + 4 C). Symetrické
-    operácie Pbcn sa NIKDY neaplikovali → spglib klasifikoval výsledok ako
-    P2_1 (#4), nie Pbcn (#60). Chýbala polovica mriežky:
-      · hustota 4.5553 vs exp. 9.185 g/cm³ = faktor 2.02×
-      · v štruktúre zostala UMELÁ DUTINA s polomerom 2.67 Å (reálna 2.10 Å),
-        do ktorej pri DFT relaxácii padal H pod povrch → to je pôvod
-        „subpovrchového H" a znehodnotilo VŠETKY Mo2C výsledky (39 systémov).
-    Wyckoff parametre boli v pôvodnom kóde SPRÁVNE, len neexpandované.
+    The original hand-coded version put only 6 atoms in the cell (4 Mo + 2 C),
+    while Pbcn with Mo on 8d and C on 4c requires 12 (8 Mo + 4 C). The Pbcn
+    symmetry operations were NEVER applied, so spglib classified the result as
+    P2_1 (#4) rather than Pbcn (#60). Half the lattice was missing:
+      · density 4.5553 against an experimental 9.185 g/cm³, a factor of 2.02
+      · an ARTIFICIAL CAVITY of radius 2.67 Å remained (the real one is 2.10 Å)
+        into which H dropped below the surface during DFT relaxation — the
+        origin of the apparent "subsurface H", invalidating every Mo2C result.
+    The Wyckoff parameters in the original code were CORRECT; they were simply
+    never expanded.
 
-    Referencia: MP mp-1552 / ICSD 43322, dataset DOI 10.17188/1191211;
-    mriežkové parametre a Wyckoff podľa arXiv:2201.12706, Tab. 1 a 2
-    (experiment a = 4.725, b = 6.022, c = 5.195 Å);
-    prototyp indexoval A. N. Christensen, Acta Chem. Scand. A 31 (1977) 509.
+    Reference: MP mp-1552 / ICSD 43322, dataset DOI 10.17188/1191211; lattice
+    parameters and Wyckoff positions from arXiv:2201.12706, Tables 1 and 2
+    (experiment a = 4.725, b = 6.022, c = 5.195 Å); the prototype was indexed by
+    A. N. Christensen, Acta Chem. Scand. A 31 (1977) 509.
 
-    Overené po oprave: 12 atómov (Mo8C4), spglib = Pbcn (#60), min. medziatómová
-    vzdialenosť 2.096 Å, hustota 9.185 g/cm³ (RTG referencia 9.19), každý Mo má
-    3 C susedov, každý C má 6 Mo susedov (CMo6 oktaédre) — presne ako MP.
+    Verified after the fix: 12 atoms (Mo8C4), spglib = Pbcn (#60), minimum
+    interatomic distance 2.096 Å, density 9.185 g/cm³ (X-ray reference 9.19),
+    every Mo has 3 C neighbours and every C has 6 Mo neighbours (CMo6 octahedra)
+    — exactly as in Materials Project.
     """
     from ase.spacegroup import crystal
     return crystal(
         symbols=["Mo", "C"],
         basis=[(0.250, 0.125, 0.083),     # Mo, Wyckoff 8d
                (0.500, 0.375, 0.250)],    # C,  Wyckoff 4c
-        spacegroup=60,                    # Pbcn (ξ-Fe2N-typ, α-Mo2C)
+        spacegroup=60,                    # Pbcn (ξ-Fe2N type, α-Mo2C)
         cellpar=[4.724, 6.004, 5.199, 90, 90, 90],
     )
 
@@ -177,41 +187,45 @@ def create_mo2c_bulk():
 def create_mob_bulk():
     """Create MoB bulk structure (β-MoB, CrB-type, orthorhombic Cmcm, No. 63).
 
-    OPRAVENÉ 2026-07-23: pôvodná hand-coded I4₁/amd verzia mala PREHODENÉ
-    z-súradnice v stĺpcoch (0.5,0.5) a (0.5,0) → Mo a B sa prekrývali na
-    0.763 Å (fyzikálne nemožné), čo znehodnotilo VŠETKY MoB DFT aj ML výsledky.
-    Nahradené overenou β-MoB (CrB-typ) z Wyckoff pozícií 4c (0, y, 1/4):
-    hustota 8.60 g/cm³ (exp. 8.65, <1 % chyba), min. B-B ~1.85 Å (reťazce).
+    CORRECTED: the original hand-coded I4₁/amd version had the z coordinates
+    SWAPPED in the (0.5,0.5) and (0.5,0) columns, so Mo and B overlapped at
+    0.763 Å — physically impossible — invalidating every MoB result, DFT and ML
+    alike. Replaced by a verified β-MoB (CrB type) built from Wyckoff positions
+    4c (0, y, 1/4): density 8.60 g/cm³ (exp. 8.65, error below 1 %), minimum
+    B–B about 1.85 Å (chains).
+
+    This generator is used as the calibration case for verify_bulk_fixes.py.
     """
     from ase.spacegroup import crystal
     return crystal(
         symbols=["Mo", "B"],
         basis=[(0.0, 0.146, 0.25), (0.0, 0.440, 0.25)],
-        spacegroup=63,                       # Cmcm (CrB-typ)
+        spacegroup=63,                       # Cmcm (CrB type)
         cellpar=[3.15, 8.47, 3.09, 90, 90, 90],
     )
 
 
 def create_ti3c2_bulk():
-    """Ti3C2O2 MXene monovrstva, P-3m1 (#164), O na CCP site. OPRAVENÉ 2026-07-28.
+    """Ti3C2O2 MXene monolayer, P-3m1 (#164), O on the CCP site. CORRECTED.
 
-    Pôvodná verzia mala UNIFORMNÉ z-frakcie po 0.050 (= 1.000 Å pri c=20 Å) pre
-    VŠETKY medzivrstvové vzdialenosti → Ti3C2 jadro stlačené o 13.7 %, stredná
-    Ti–C väzba 2.036 Å namiesto 2.202 Å. Bola to „rovnomerná mriežka", nie
-    kryštálová štruktúra — z-súradnice neboli odvodené zo žiadnych väzbových dĺžok.
+    The original version used UNIFORM z fractions of 0.050 (= 1.000 Å at
+    c = 20 Å) for EVERY interlayer spacing, compressing the Ti3C2 core by 13.7 %
+    and giving a central Ti–C bond of 2.036 Å instead of 2.202 Å. That is an
+    evenly spaced grid, not a crystal structure — the z coordinates were not
+    derived from any bond lengths.
 
-    Nahradené z-frakciami odvodenými z DFT väzbových dĺžok:
+    Replaced by z fractions derived from DFT bond lengths:
     Li, Y. et al., "First-Principles Study on the Structural, Electronic, and
     ... Properties of Ti3C2 MXene", ACS Omega 7 (2022) 40578,
-    DOI 10.1021/acsomega.2c05913, Table 1, riadok "Ti3C2O2 / CCP"
-    (najstabilnejšia konfigurácia):
-        a = 3.083 Å, d(Ti_stred–C) = 2.202, d(Ti_povrch–C) = 2.052,
-        d(Ti_povrch–O) = 1.993 Å
+    DOI 10.1021/acsomega.2c05913, Table 1, row "Ti3C2O2 / CCP"
+    (the most stable configuration):
+        a = 3.083 Å, d(Ti_middle–C) = 2.202, d(Ti_surface–C) = 2.052,
+        d(Ti_surface–O) = 1.993 Å
 
-    Overené po oprave: spglib potvrdí P-3m1 (#164), Wyckoff ['a','d','d','c'],
-    min. vzdialenosť 1.993 Å (Ti–O), Ti–C 2.052 / 2.202 Å, O–O hrúbka 6.428 Å,
-    vrstva vycentrovaná na z = 10.0 Å.
-    Pozn.: hustota tu NIE JE diagnostikum (bunka je monovrstva + vákuum).
+    Verified after the fix: spglib confirms P-3m1 (#164), Wyckoff
+    ['a','d','d','c'], minimum distance 1.993 Å (Ti–O), Ti–C 2.052 / 2.202 Å,
+    O–O thickness 6.428 Å, layer centred at z = 10.0 Å.
+    Note: density is NOT diagnostic here — the cell is a monolayer plus vacuum.
     """
     from ase.spacegroup import crystal
     a, c = 3.083, 20.0
@@ -224,8 +238,8 @@ def create_ti3c2_bulk():
     z_O = (dz_TiC_mid + dz_TiC_surf + dz_TiO) / c           # 0.16069
     return crystal(
         symbols=["Ti", "Ti", "C", "O"],
-        basis=[(0.0, 0.0, 0.0),          # Ti stredné,   Wyckoff 1a
-               (1 / 3, 2 / 3, z_Ti2),    # Ti povrchové, Wyckoff 2d
+        basis=[(0.0, 0.0, 0.0),          # Ti middle,  Wyckoff 1a
+               (1 / 3, 2 / 3, z_Ti2),    # Ti surface, Wyckoff 2d
                (2 / 3, 1 / 3, z_C),      # C,            Wyckoff 2d
                (0.0, 0.0, z_O)],         # O na CCP site, Wyckoff 2c
         spacegroup=164,                  # P-3m1
@@ -290,7 +304,7 @@ def _parse_miller(miller):
 
 
 def _min_same_element_distance(atoms):
-    """Najmenšia vzdialenosť medzi atómami TOHO ISTÉHO prvku (PBC-aware)."""
+    """Smallest distance between atoms of the SAME element (PBC-aware)."""
     d = atoms.get_all_distances(mic=True)
     np.fill_diagonal(d, np.inf)
     best = np.inf
@@ -305,16 +319,18 @@ def _min_same_element_distance(atoms):
 def create_slab(bulk_atoms, miller="(100)", size=(2, 2, 4), vacuum=8):
     """Create a surface slab for a requested Miller index.
 
-    BRÁNA PROTI STACKING FAULTU (pridané 2026-07-28): `ase.build.surface` s
-    `layers=size[2]` vytvorí pri niektorých kombináciách rezu a počtu vrstiev
-    AA stacking fault — dva atómy toho istého prvku skončia bližšie než v bulku.
-    OVERENÉ na γ-Mo2N(111): `layers=4` (default!) dá Mo–Mo 2.4027 Å namiesto
-    2.9427 Å, kým layers 3/5/6/8 sú v poriadku; (100) a (110) sú v poriadku vždy.
-    Predtým by taký slab prešiel ticho a znehodnotil celú fazetu.
+    STACKING-FAULT GUARD: for some combinations of cut and layer count,
+    `ase.build.surface` with `layers=size[2]` produces an AA stacking fault —
+    two atoms of the same element end up closer than they are in the bulk.
+    VERIFIED on γ-Mo2N(111): `layers=4` (the default) gives Mo–Mo 2.4027 Å
+    instead of 2.9427 Å, while layers 3, 5, 6 and 8 are fine, and the (100) and
+    (110) cuts are always fine. Such a slab used to pass silently and invalidate
+    the whole facet.
 
-    Preto: postav slab, porovnaj min. rovnako-prvkovú vzdialenosť s bulkom a ak
-    je degradovaná o >5 %, skús layers+1 … layers+3. Ak sa to nepodarí, vyhoď
-    výnimku — NIKDY nevracaj rozbitú geometriu.
+    Therefore: build the slab, compare its minimum same-element distance against
+    the bulk, and on a degradation of more than 5 % retry with
+    layers+1 … layers+3. If that does not recover it, raise — NEVER return a
+    broken geometry.
     """
     indices = _parse_miller(miller)
     ref = _min_same_element_distance(bulk_atoms)
@@ -330,15 +346,15 @@ def create_slab(bulk_atoms, miller="(100)", size=(2, 2, 4), vacuum=8):
         if not np.isfinite(ref) or got >= 0.95 * ref:
             if extra:
                 print(f"    ⓘ {miller}: layers {size[2]}→{layers} "
-                      f"(pôvodné dávalo stacking fault {last_err:.4f} Å < {0.95*ref:.4f} Å)")
+                      f"(original gave a stacking fault, {last_err:.4f} Å < {0.95*ref:.4f} Å)")
             _apply_constraints(slab)
             return slab
         last_err = got
 
     raise ValueError(
-        f"create_slab({miller}, size={size}): stacking fault sa nedá odstrániť ani "
-        f"pri layers={size[2]}+3 — min. rovnako-prvková vzdialenosť {last_err:.4f} Å "
-        f"vs bulk {ref:.4f} Å. Skontroluj bulk štruktúru a rez.")
+        f"create_slab({miller}, size={size}): the stacking fault persists even at "
+        f"layers={size[2]}+3 — minimum same-element distance {last_err:.4f} Å "
+        f"against a bulk value of {ref:.4f} Å. Check the bulk structure and the cut.")
 
 
 def create_edge_ribbon(bulk_atoms, width=6, length=2, vacuum=8, edge_type="Mo"):
@@ -393,12 +409,13 @@ def _species_top_layer(slab, symbol, tol=0.5, min_count=1,
                        max_depth=SURFACE_DEPTH_TOL):
     """Indices of `symbol` atoms in the topmost layer *of that species*.
 
-    OPRAVA (2026-07-28): pôvodná verzia hľadala atómy do 0.5 Å od GLOBÁLNEHO
-    z_max. Na termináciách, kde je požadovaný prvok hoc len o 0.05 Å nižšie ako
-    najvyššia vrstva iného prvku (Mo2C(111): Mo je 0.545 Å pod C), nenašla NIČ
-    a volajúci ticho vrátil pristinný slab → dáta bez vakancie/dopantu.
-    Teraz sa referencia berie z maxima z-súradnice DANÉHO prvku a nedostatok
-    kandidátov je HLASNÁ chyba, nie tichý no-op.
+    FIX: the original version looked for atoms within 0.5 Å of the GLOBAL
+    z_max. On terminations where the requested element sits even slightly below
+    the topmost layer of another element (on Mo2C(111) Mo is 0.545 Å below C),
+    it found NOTHING and the caller silently returned the pristine slab, i.e.
+    data with no vacancy or dopant at all. The reference is now taken from the
+    maximum z of THAT element, and having too few candidates is a LOUD error
+    rather than a silent no-op.
     """
     z = slab.get_positions()[:, 2]
     idx = [i for i in range(len(slab)) if slab[i].symbol == symbol]
@@ -518,12 +535,14 @@ def create_ni_mox_interface(mox_bulk_builder, miller="(111)", separation=2.2):
     mox = create_slab(mox_bulk, miller=miller, size=(2, 2, 2), vacuum=0)
     mox.set_pbc([True, True, False])
 
-    # POZOR (2026-07-23): tento „trend-level" model NEzosúlaďuje mriežky Ni(3×3)
-    # a MoX(2×2) — sú nekomenzurabilné (líšia sa 2–3×). Po `set_cell(ni.cell)` sa
-    # MoX atómy zabalia cez PBC a prekryjú (najmä (111): min-dist 0.43–0.92 Å).
-    # Epitaxný strain na Ni bunku vyžaduje −47..−71 % (nefyzikálne). Preto sú tieto
-    # interface geometricky nevalidné a NEPOUŽÍVAJÚ sa v korigovanej validácii;
-    # správne riešenie by bola komenzurabilná superbunka (samostatná úloha).
+    # WARNING: this "trend-level" model does NOT match the Ni(3x3) and MoX(2x2)
+    # lattices — they are incommensurate, differing by a factor of 2-3. After
+    # `set_cell(ni.cell)` the MoX atoms wrap through the PBC and overlap,
+    # especially on (111) where the minimum distance falls to 0.43-0.92 Å. The
+    # epitaxial strain onto the Ni cell would be -47 to -71 %, which is
+    # unphysical. These interfaces are therefore geometrically invalid and are
+    # NOT used in the corrected validation; the proper solution is a
+    # commensurate supercell, which is a separate piece of work.
 
     # Stack MoX on top of Ni
     ni_positions = ni.get_positions()

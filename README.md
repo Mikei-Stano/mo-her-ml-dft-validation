@@ -147,6 +147,24 @@ anomaly detector for adsorption trajectories — bond formation and breaking
 with a hysteresis band, slab-atom displacement, and desorption — following the
 approach used in the AdsorbML protocol.
 
+## Attribution
+
+Most of this repository is original work, but not all of it, and the difference
+is recorded in [`NOTICE`](NOTICE).
+
+The three AdsorbML pipeline scripts under `scripts/adsorbml/` were originally
+written by **Michal Skaličan** ([@skalican19](https://github.com/skalican19))
+as part of [misohu/mo-h-adsorption-gpaw](https://github.com/misohu/mo-h-adsorption-gpaw),
+maintained by **Michal Hucko** ([@misohu](https://github.com/misohu)). They are
+included here in modified form, with each file stating in its header what was
+changed. That upstream repository carries no licence file, so those three
+scripts are included for reproducibility with attribution, pending
+clarification from their authors — see `NOTICE` for the full statement.
+
+`scripts/gpaw_h_adsorption.py` and `scripts/generate_structures.py` also
+originate upstream and have since been substantially rewritten here. The
+crystal-structure corrections are being contributed back as a pull request.
+
 ## Citation
 
 Please cite via `CITATION.cff`. This section will be updated with the
@@ -154,7 +172,8 @@ manuscript DOI on publication.
 
 ## License
 
-MIT (`LICENSE`) for code; CC BY 4.0 (`LICENSE-DATA`) for data files.
+MIT (`LICENSE`) for code and CC BY 4.0 (`LICENSE-DATA`) for data files, with the
+exception of the third-party files listed in [`NOTICE`](NOTICE).
 
 ## Acknowledgement
 

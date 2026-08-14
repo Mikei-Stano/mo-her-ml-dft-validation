@@ -1,16 +1,16 @@
-"""
-scripts/adsorbml/3-extract_rank.py
+"""AdsorbML step 3: rank slabs by the ML-predicted adsorption free energy, pick
+the best H* candidate per slab, extract its H position and write a manifest for
+the DFT driver.
 
-AdsorbML step 3: Rank all slabs by ΔG*H = E_ads_ml + 0.24 eV (Sabatier criterion),
-pick the best H* candidate per slab, extract its H atom position, and write a
-manifest for gpaw_h_adsorption.py --adsorbml-candidates.
+ATTRIBUTION
+    Written by Michal Skalican (github.com/skalican19) as part of
+    github.com/misohu/mo-h-adsorption-gpaw, maintained by Michal Hucko
+    (github.com/misohu). Included here unmodified.
 
-Reads:  data/adsorbml_results/<name>/candidates.csv
-        data/adsorbml_manifest.csv  (for slab_file paths)
-Writes: data/adsorbml_results/ranked_candidates.csv
-
-Usage:
-  python scripts/adsorbml/3-extract_rank.py
+    Note: this script selects the candidate closest to dG = 0. That is a
+    screening heuristic rather than the AdsorbML convention of lowest adslab
+    energy; see scripts/campaign_stage3_rank.py in this repository for the
+    alternative used in the validation campaign, and the reasoning behind it.
 """
 from pathlib import Path
 

@@ -25,3 +25,16 @@ keywords:
   - GPAW
   - catalysis
   - computational screening
+references:
+  - type: software
+    title: "mo-h-adsorption-gpaw"
+    abstract: >-
+      Upstream GPAW workflow for hydrogen adsorption energies on Mo compounds.
+      The AdsorbML pipeline scripts in scripts/adsorbml/ of the present
+      repository derive from this work; see NOTICE.
+    repository-code: "https://github.com/misohu/mo-h-adsorption-gpaw"
+    authors:
+      - family-names: "Hucko"
+        given-names: "Michal"
+      - family-names: "Skaličan"
+        given-names: "Michal"

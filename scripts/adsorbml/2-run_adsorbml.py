@@ -1,17 +1,15 @@
-"""
-scripts/adsorbml/2-run_adsorbml.py
+"""AdsorbML step 2: screen H* adsorption candidates on the UMA-M relaxed slabs
+(100 placements per slab, ML-relaxed with the UMA-M OC20 head).
 
-AdsorbML step 2: Screen H* adsorption candidates on UMA-M relaxed slabs using
-AdsorbML (100 placements per slab, ML-relaxed with UMA-M OC20 head).
+ATTRIBUTION
+    Originally written by Michal Skalican (github.com/skalican19) as part of
+    github.com/misohu/mo-h-adsorption-gpaw, maintained by Michal Hucko
+    (github.com/misohu).
 
-Reads:  data/adsorbml_manifest.csv
-Writes: data/adsorbml_results/<name>/candidates.csv
-        data/adsorbml_results/<name>/candidate_*.traj
-        data/adsorbml_results/<name>/adsorbml.log
-        data/adsorbml_results/batch_summary.csv
-
-Usage:
-  python scripts/adsorbml/2-run_adsorbml.py
+    Modifications in this repository: a --manifest command-line argument,
+    validation of the required manifest columns, and cross-machine path
+    resolution for slab_file entries, which otherwise carry absolute paths from
+    the machine that produced them.
 """
 import ast
 import argparse

@@ -1,0 +1,50 @@
+NOTICE — third-party code and attribution
+=========================================
+
+Most of this repository is original work by Michal Staňo and is released under
+the MIT License (see LICENSE). The exceptions are recorded here.
+
+scripts/adsorbml/
+-----------------
+
+The three AdsorbML pipeline scripts
+
+    1-relax_uma_omat.py
+    2-run_adsorbml.py
+    3-extract_rank.py
+
+were originally written by **Michal Skaličan** (github.com/skalican19) as part
+of the repository
+
+    https://github.com/misohu/mo-h-adsorption-gpaw
+
+maintained by **Michal Hucko** (github.com/misohu), and are included here in
+modified form. Each file carries an ATTRIBUTION block in its header stating
+what was changed relative to the original. `3-extract_rank.py` is included
+unmodified.
+
+**Licensing status.** The upstream repository does not currently carry a
+licence file, so the terms under which these three files may be redistributed
+are not formally established. They are included here for reproducibility of the
+computational pipeline described in this repository, with attribution, pending
+clarification from the upstream authors. If either author asks for them to be
+removed or relicensed, that will be done.
+
+The MIT License in LICENSE therefore applies to the original work in this
+repository — everything outside `scripts/adsorbml/` — and not to the three
+files listed above.
+
+Derived material
+----------------
+
+`scripts/gpaw_h_adsorption.py` and `scripts/generate_structures.py` began as
+files from the same upstream repository, authored by Michal Hucko, and have
+since been substantially rewritten here: the seven bulk crystal-structure
+generators were rebuilt against published crystallographic data, a
+stacking-fault guard was added to the slab builder, and the DFT driver gained
+restartable relaxation, provenance columns and a consistent H₂ reference. The
+crystal-structure corrections are being offered back upstream as a pull
+request.
+
+Everything under `hpc/`, `validation/`, `analysis/` and `scripts/`
+(`generate_campaign_set.py`, `campaign_stage3_rank.py`) is original work.

@@ -1,19 +1,16 @@
-"""
-scripts/adsorbml/1-relax_uma_omat.py
+"""AdsorbML step 1: relax slab structures with UMA-M (OMAT head) and write a
+manifest for the next step.
 
-AdsorbML step 1: Relax POSCAR structures with UMA-M (OMAT head) and write
-a manifest CSV for the next step.
+ATTRIBUTION
+    Originally written by Michal Skalican (github.com/skalican19) as part of
+    github.com/misohu/mo-h-adsorption-gpaw, maintained by Michal Hucko
+    (github.com/misohu).
 
-Excluded: structures with 'graphene', 'nanoribbon', or 'edge' in their name.
-
-Outputs:
-  data/uma_relaxed/<name>.traj   — relaxed slab per structure
-  data/adsorbml_manifest.csv     — manifest for 2-run_adsorbml.py
-
-Usage:
-  python scripts/adsorbml/1-relax_uma_omat.py
-  python scripts/adsorbml/1-relax_uma_omat.py --include "MoS2_*,Mo2N_*"
-  python scripts/adsorbml/1-relax_uma_omat.py --workers 2
+    Modifications in this repository: multi-GPU worker pool
+    (WORKERS_PER_GPU, one process per GPU), a raised MAX_STEPS convergence
+    budget, and a fix to CUDA_VISIBLE_DEVICES handling - it must be set in the
+    parent before Process.start(), because setting it inside the worker is too
+    late for fairchem's CUDA runtime initialisation.
 """
 import sys
 import os

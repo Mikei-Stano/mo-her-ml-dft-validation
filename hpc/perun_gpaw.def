@@ -1,0 +1,51 @@
+Bootstrap: docker
+From: ubuntu:22.04
+
+# Apptainer/Singularity image for running scripts/gpaw_h_adsorption.py
+# (--adsorbml-candidates mode = stage 4 DFT validation of the ML/AdsorbML
+# screening) on PERUN.
+#
+# GPAW here runs in LCAO mode as a single serial process per structure
+# (see CORES_PER_CALC / _set_thread_env in gpaw_h_adsorption.py) — it
+# parallelizes across STRUCTURES (SLURM array / --workers), not across
+# MPI ranks within one structure. No MPI is required in the image.
+#
+# Build (on a machine where you have sudo — NOT the PERUN login node):
+#   sudo singularity build perun_gpaw.sif perun_gpaw.def
+#   scp perun_gpaw.sif perun:/home/<user>/cemea/mo-h-adsorption-gpaw/hpc/
+#
+# No local sudo? Use the Sylabs remote builder instead:
+#   singularity build --remote perun_gpaw.sif perun_gpaw.def
+
+%post
+    set -eux
+    export DEBIAN_FRONTEND=noninteractive
+
+    apt-get update
+    apt-get install -y --no-install-recommends \
+        build-essential gfortran \
+        libopenblas-dev liblapack-dev \
+        libfftw3-dev \
+        libxc-dev \
+        python3 python3-pip python3-dev \
+        ca-certificates \
+        && rm -rf /var/lib/apt/lists/*
+
+    ln -sf /usr/bin/python3 /usr/bin/python
+
+    python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
+    python3 -m pip install --no-cache-dir numpy scipy ase pandas gpaw
+
+    mkdir -p /opt/gpaw-data
+    gpaw install-data --no-register /opt/gpaw-data
+
+%environment
+    export GPAW_SETUP_PATH=/opt/gpaw-data
+    export LC_ALL=C
+
+%runscript
+    exec python3 "$@"
+
+%labels
+    Author cemea
+    Purpose "GPAW LCAO DFT validation (gpaw_h_adsorption.py --adsorbml-candidates) on PERUN"

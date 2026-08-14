@@ -1,0 +1,29 @@
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+.DS_Store
+
+# heavy computational outputs — regenerate on the cluster, do not commit
+*.log
+*.out
+*.traj
+*.gpw
+data/outputs/gpaw_calculations/
+
+# intermediate build artefact of build_manuscript_pdf.py
+.manuscript_notes_en.print.html
+
+# local environments
+.venv/
+venv/
+
+# Unpublished manuscript material — kept locally, never committed
+analysis/MANUSCRIPT_NOTES_EN.*
+analysis/PAPER_PACKAGE_EN.md
+analysis/build_manuscript_*.py
+
+# Results — withheld until publication
+analysis/
+data/outputs/
+data/inputs/screening_265_ranked.csv

@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use this software or data, please cite it as below."
+title: "Validating machine-learned hydrogen adsorption energies against DFT"
+abstract: >-
+  Code and data for a validation study of AdsorbML/UMA machine-learning
+  predictions of the hydrogen adsorption free energy against GPAW DFT
+  calculations, across seven families of Mo-based HER catalyst materials.
+  265 candidate structures were screened with the ML model and 83 were
+  recomputed with DFT using a balanced factorial validation design.
+type: software
+authors:
+  - family-names: "Staňo"
+    given-names: "Michal"
+    email: "michal.stano@savba.sk"
+    affiliation: "Centre for Advanced Materials Application (CEMEA), Slovak Academy of Sciences"
+repository-code: "https://github.com/Mikei-Stano/mo-her-ml-dft-validation"
+license: MIT
+version: "1.0.0"
+date-released: "2026-08-14"
+keywords:
+  - hydrogen evolution reaction
+  - density functional theory
+  - machine-learning interatomic potentials
+  - AdsorbML
+  - GPAW
+  - catalysis
+  - computational screening
